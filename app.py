@@ -13,7 +13,6 @@ from langchain_core.prompts import ChatPromptTemplate
 # Load environment variables (GEMINI_API_KEY)
 load_dotenv()
 
-# Initialize FastAPI app for Step 6: End-to-End Integration
 app = FastAPI(
     title="RAG System API",
     description="API for querying the RAG vector database.",
@@ -31,29 +30,26 @@ rag_chain = None
 def load_rag_pipeline():
     """Loads the vector database and LLM chain when the server starts."""
     global rag_chain
-    
+
     if not os.path.exists("./chroma_db"):
         print("WARNING: ./chroma_db not found. Please run ingestion.py first.")
         return
 
-    # Step 5: Implement the Retriever
     vectorstore = Chroma(
-        persist_directory="./chroma_db", 
+        persist_directory="./chroma_db",
         embedding_function=GoogleGenerativeAIEmbeddings(
             model="models/embedding-001",
             google_api_key=os.getenv("GEMINI_API_KEY")
         )
     )
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-    
-    # Step 7: Generation
+
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
         temperature=0,
         google_api_key=os.getenv("GEMINI_API_KEY")
     )
-    
-    # Step 5: Prompt Engineering strictly grounding the LLM
+
     system_prompt = (
         "You are an expert assistant strictly relying on the provided context. "
         "Use the following pieces of retrieved context to answer the question. "
@@ -68,7 +64,6 @@ def load_rag_pipeline():
         ("human", "{input}"),
     ])
     
-    # Orchestrate the chains
     qa_chain = create_stuff_documents_chain(llm, prompt)
     rag_chain = create_retrieval_chain(retriever, qa_chain)
     print("RAG Pipeline successfully loaded into memory.")
@@ -82,7 +77,6 @@ def ask_question(query: UserQuery):
             detail="RAG pipeline not initialized. Ensure ingestion.py was run."
         )
     
-    # Pass the user's question to the LangChain retrieval chain
     response = rag_chain.invoke({"input": query.question})
     
     return {
@@ -91,5 +85,4 @@ def ask_question(query: UserQuery):
     }
 
 if __name__ == "__main__":
-    # Run the server on port 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)

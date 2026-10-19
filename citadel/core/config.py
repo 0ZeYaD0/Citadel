@@ -1,31 +1,73 @@
-"""Centralised application settings, loaded from .env or environment variables."""
+"""Application configuration for Citadel."""
 
-from pydantic_settings import BaseSettings
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
+from dotenv import load_dotenv
 
-class Settings(BaseSettings):
-    """Application-wide configuration."""
-
-    # Gemini
-    gemini_api_key: str = ""
-
-    # Embedding model
-    embedding_model: str = "models/text-embedding-004"
-
-    # ChromaDB
-    chroma_persist_dir: str = "./chroma_db"
-    chroma_collection_name: str = "citadel_docs"
-
-    # Chunking defaults (consumed by the chunker, defined here for central control)
-    chunk_size: int = 1000
-    chunk_overlap: int = 200
-
-    model_config = {
-        "env_file": ".env",
-        "env_file_encoding": "utf-8",
-        "extra": "ignore",
-    }
+from citadel.core.exceptions import ConfigurationError
 
 
-# Singleton instance importable across the app
-settings = Settings()
+load_dotenv()
+
+
+@dataclass(frozen=True)
+class Settings:
+	"""Runtime settings loaded from environment variables."""
+
+	GEMINI_API_KEY: str
+	TEXTBOOKS_DIR: Path = Path("data/textbooks")
+	CHROMA_PERSIST_DIR: Path = Path("chroma_db")
+	CHUNK_SIZE: int = 1000
+	CHUNK_OVERLAP: int = 200
+
+
+def _read_int(name: str, default: int) -> int:
+	"""Read a positive integer environment variable."""
+	import os
+
+	raw_value = os.getenv(name)
+	if raw_value is None or not raw_value.strip():
+		return default
+
+	try:
+		value = int(raw_value)
+	except ValueError as exc:
+		raise ConfigurationError(f"{name} must be an integer.") from exc
+
+	if value <= 0:
+		raise ConfigurationError(f"{name} must be greater than zero.")
+	return value
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+	"""Return the cached application settings.
+
+	Raises:
+		ConfigurationError: If the required Gemini API key is missing or a
+			numeric setting is invalid.
+	"""
+	import os
+
+	api_key = os.getenv("GEMINI_API_KEY", "").strip()
+	if not api_key or api_key == "your_gemini_api_key_here":
+		raise ConfigurationError(
+			"GEMINI_API_KEY must be set to a valid Gemini API key."
+		)
+
+	chunk_size = _read_int("CHUNK_SIZE", 1000)
+	chunk_overlap = _read_int("CHUNK_OVERLAP", 200)
+	if chunk_overlap >= chunk_size:
+		raise ConfigurationError("CHUNK_OVERLAP must be less than CHUNK_SIZE.")
+
+	return Settings(
+		GEMINI_API_KEY=api_key,
+		TEXTBOOKS_DIR=Path(os.getenv("TEXTBOOKS_DIR", "data/textbooks")),
+		CHROMA_PERSIST_DIR=Path(
+			os.getenv("CHROMA_PERSIST_DIR", "chroma_db")
+		),
+		CHUNK_SIZE=chunk_size,
+		CHUNK_OVERLAP=chunk_overlap,
+	)
