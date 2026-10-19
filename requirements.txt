@@ -2,6 +2,8 @@ langchain
 langchain-community
 langchain-google-genai
 langchain-chroma
+langchain-text-splitters
+pydantic-settings
 pypdf
 python-dotenv
 fastapi
