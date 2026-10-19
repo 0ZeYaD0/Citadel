@@ -80,37 +80,16 @@ class ChromaRepository(VectorRepository):
         metadatas = results.get("metadatas", [[]])[0]
         distances = results.get("distances", [[]])[0]
 
-        for chunk_id, doc_text, metadata, distance in zip(
-            ids, documents, metadatas, distances
-        ):
-            # Convert cosine distance to similarity score
-            # (1.0 = identical, 0.0 = orthogonal)
+        for chunk_id, doc_text, metadata, distance in zip(ids, documents, metadatas, distances):
+            # Convert cosine distance to similarity score (1.0 = identical, 0.0 = orthogonal)
             similarity_score = 1.0 - distance if distance is not None else None
             retrieved_chunks.append(
                 DocumentChunk(
                     id=chunk_id,
                     content=doc_text,
                     metadata=metadata or {},
-                    score=similarity_score,
+                    score=similarity_score
                 )
             )
 
         return retrieved_chunks
-
-    def document_count(self) -> int:
-        """Return the total number of stored documents."""
-        return self._vectorstore._collection.count()
-
-    def delete_collection(self) -> None:
-        """Delete the entire Chroma collection."""
-        self._vectorstore.delete_collection()
-        logger.info("Deleted collection '%s'.", self._collection_name)
-
-    # ── Convenience ────────────────────────────────────────────────────
-
-    def as_retriever(self, **kwargs):
-        """Return a LangChain retriever backed by this store.
-
-        Useful for plugging into LangChain retrieval chains downstream.
-        """
-        return self._vectorstore.as_retriever(**kwargs)
