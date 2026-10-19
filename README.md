@@ -2,11 +2,13 @@
 
 Citadel is a Gemini Notebook-inspired study assistant. A student can upload or
 add a textbook to the system and ask questions about its contents. The assistant
+searches the textbook for relevant passages and uses them to produce a grounded
 answer instead of relying only on general knowledge.
 
 ## Idea
 
-material. Possible questions include:
+The project is designed to help students study from their own learning material.
+Possible questions include:
 
 - "Summarise this chapter."
 - "Explain this concept in simple terms."
@@ -36,11 +38,11 @@ python -m pip install -r requirements.txt
 Create a `.env` file and add your API key:
 
 ```env
-OPENAI_API_KEY=your_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-The current prototype uses OpenAI embeddings and a chat model. The model
-provider can be changed later if the project is migrated to Gemini.
+The application uses Gemini for both embeddings and chat responses. Replace the
+placeholder with your actual Gemini API key and keep the `.env` file private.
 
 ## Running the API
 
@@ -58,5 +60,3 @@ request to `/ask`:
   "question": "What is the main idea of chapter one?"
 }
 ```
-
->>>>>>> b0dc72b (README change)

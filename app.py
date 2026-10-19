@@ -4,13 +4,13 @@ from pydantic import BaseModel
 import uvicorn
 from dotenv import load_dotenv
 
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_chroma import Chroma
 from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 
-# Load environment variables (OPENAI_API_KEY)
+# Load environment variables (GEMINI_API_KEY)
 load_dotenv()
 
 # Initialize FastAPI app for Step 6: End-to-End Integration
@@ -39,12 +39,19 @@ def load_rag_pipeline():
     # Step 5: Implement the Retriever
     vectorstore = Chroma(
         persist_directory="./chroma_db", 
-        embedding_function=OpenAIEmbeddings(model="text-embedding-3-small")
+        embedding_function=GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key=os.getenv("GEMINI_API_KEY")
+        )
     )
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
     
     # Step 7: Generation
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.0-flash",
+        temperature=0,
+        google_api_key=os.getenv("GEMINI_API_KEY")
+    )
     
     # Step 5: Prompt Engineering strictly grounding the LLM
     system_prompt = (

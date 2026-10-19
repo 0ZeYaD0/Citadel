@@ -1,6 +1,6 @@
 langchain
 langchain-community
-langchain-openai
+langchain-google-genai
 langchain-chroma
 pypdf
 python-dotenv
