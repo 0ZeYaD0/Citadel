@@ -1,2 +1,3 @@
 # Citadel
-A small version inspired from notebook-LM
+
+1- Run pip install -r requirements.txt
