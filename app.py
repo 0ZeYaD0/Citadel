@@ -1,4 +1,5 @@
 import os
+import logging
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
@@ -11,6 +12,8 @@ from langchain_classic.chains.combine_documents import create_stuff_documents_ch
 from langchain_core.prompts import ChatPromptTemplate
 
 from citadel.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables (GEMINI_API_KEY)
 load_dotenv()
@@ -49,7 +52,7 @@ def load_rag_pipeline():
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3.8-flash",
+        model=settings.chat_model,
         temperature=0,
         google_api_key=settings.gemini_api_key
     )
@@ -70,7 +73,7 @@ def load_rag_pipeline():
     
     qa_chain = create_stuff_documents_chain(llm, prompt)
     rag_chain = create_retrieval_chain(retriever, qa_chain)
-    print("RAG Pipeline successfully loaded into memory.")
+    logger.info("RAG pipeline loaded with chat model: %s", settings.chat_model)
 
 @app.post("/ask")
 def ask_question(query: UserQuery):
@@ -81,7 +84,32 @@ def ask_question(query: UserQuery):
             detail="RAG pipeline not initialized. Ensure ingestion.py was run."
         )
     
-    response = rag_chain.invoke({"input": query.question})
+    try:
+        response = rag_chain.invoke({"input": query.question})
+    except Exception as exc:
+        logger.exception(
+            "Gemini response generation failed using model %s: %s",
+            settings.chat_model,
+            exc,
+        )
+        message = str(exc).upper()
+        if "503" in message or "UNAVAILABLE" in message:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Gemini is temporarily unavailable. "
+                    "Please retry shortly or choose another CHAT_MODEL."
+                ),
+            ) from exc
+        if "429" in message or "RESOURCE_EXHAUSTED" in message:
+            raise HTTPException(
+                status_code=429,
+                detail="Gemini quota is currently exhausted. Please retry later.",
+            ) from exc
+        raise HTTPException(
+            status_code=502,
+            detail="The Gemini response could not be generated.",
+        ) from exc
     
     return {
         "question": query.question, 
