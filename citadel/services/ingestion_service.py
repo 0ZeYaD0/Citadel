@@ -1,6 +1,8 @@
 """Service that orchestrates document ingestion into the vector store."""
 
 import logging
+import random
+import re
 import time
 
 from langchain_core.documents import Document
@@ -8,6 +10,10 @@ from langchain_core.documents import Document
 from citadel.domain.interfaces import VectorRepository
 
 logger = logging.getLogger(__name__)
+
+_MAX_RATE_LIMIT_RETRIES = 8
+_MIN_RATE_LIMIT_WAIT_SECONDS = 60.0
+_RETRY_DELAY_PATTERN = re.compile(r"retry(?:ing)? in\s+([0-9]+(?:\.[0-9]+)?)s")
 
 
 class IngestionService:
@@ -58,23 +64,44 @@ class IngestionService:
         return total_stored
 
     def _store_batch_with_retry(self, batch: list[Document]) -> list[str]:
-        """Retry transient provider throttling without duplicating batches."""
-        for attempt in range(4):
+        """Retry rate-limited batches across the provider quota window.
+
+        Gemini's free embedding quota is measured over a rolling minute. A
+        short fixed retry sequence can exhaust all retries before that window
+        resets, so the provider's suggested delay is honored and never reduced
+        below one minute for quota exhaustion.
+        """
+        for attempt in range(_MAX_RATE_LIMIT_RETRIES):
             try:
                 return self._repo.add_documents(batch)
             except Exception as exc:
                 message = str(exc).upper()
                 is_rate_limited = "429" in message or "RESOURCE_EXHAUSTED" in message
-                if not is_rate_limited or attempt == 3:
+                if not is_rate_limited or attempt == _MAX_RATE_LIMIT_RETRIES - 1:
                     raise
-                delay = 5 * (attempt + 1)
+                delay = self._retry_delay_seconds(str(exc), attempt)
                 logger.warning(
-                    "Embedding provider rate-limited the batch; retrying in %d seconds.",
+                    "Embedding provider rate-limited the batch; retrying in %.1f "
+                    "seconds (attempt %d/%d).",
                     delay,
+                    attempt + 1,
+                    _MAX_RATE_LIMIT_RETRIES - 1,
                 )
                 time.sleep(delay)
 
         raise RuntimeError("Unreachable retry state.")
+
+    @staticmethod
+    def _retry_delay_seconds(error_message: str, attempt: int) -> float:
+        """Calculate a quota-aware retry delay with small jitter."""
+        match = _RETRY_DELAY_PATTERN.search(error_message)
+        provider_delay = float(match.group(1)) if match else 0.0
+        exponential_delay = 2**attempt * 5.0
+        return max(
+            _MIN_RATE_LIMIT_WAIT_SECONDS,
+            provider_delay,
+            exponential_delay,
+        ) + random.uniform(0.0, 2.0)
 
     def clear_store(self) -> None:
         """Delete all documents from the vector store."""
