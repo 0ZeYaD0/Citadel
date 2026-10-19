@@ -1,41 +1,78 @@
-from typing import List
-import chromadb
-from citadel.domain.interfaces import IVectorRepository
+"""ChromaDB-backed vector repository using langchain-chroma."""
+
+import logging
+
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+
+from citadel.core.config import settings
+from citadel.domain.interfaces import VectorRepository
 from citadel.domain.models import DocumentChunk
+from citadel.infrastructure.llm.gemini_embedder import GeminiEmbedder
+
+logger = logging.getLogger(__name__)
 
 
-class ChromaRepository(IVectorRepository):
-    def __init__(self, persist_directory: str = "./chroma_db", collection_name: str = "citadel_docs"):
-        self.client = chromadb.PersistentClient(path=persist_directory)
-        # Using cosine similarity space so distances are normalized
-        self.collection = self.client.get_or_create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": "cosine"}
+class ChromaRepository(VectorRepository):
+    """Persists and queries document embeddings in a local ChromaDB store.
+
+    The repository owns its ``GeminiEmbedder`` instance so that embedding
+    model and vector store always stay in sync.
+    """
+
+    def __init__(
+        self,
+        embedder: GeminiEmbedder | None = None,
+        persist_directory: str | None = None,
+        collection_name: str | None = None,
+    ) -> None:
+        self._embedder = embedder or GeminiEmbedder()
+        self._persist_dir = persist_directory or settings.chroma_persist_dir
+        self._collection_name = collection_name or settings.chroma_collection_name
+
+        self._vectorstore = Chroma(
+            collection_name=self._collection_name,
+            embedding_function=self._embedder.langchain_embeddings,
+            persist_directory=self._persist_dir,
+        )
+        logger.info(
+            "ChromaRepository initialised  "
+            "(collection=%s, dir=%s, docs=%d)",
+            self._collection_name,
+            self._persist_dir,
+            self.document_count(),
         )
 
-    def add_chunks(self, chunks: List[DocumentChunk], embeddings: List[List[float]]) -> None:
-        """Your friend's ingestion service will call this to store PDF chunks."""
-        if not chunks:
-            return
-        self.collection.upsert(
-            ids=[chunk.id for chunk in chunks],
-            documents=[chunk.content for chunk in chunks],
-            embeddings=embeddings,
-            metadatas=[chunk.metadata for chunk in chunks]
-        )
+    # ── VectorRepository interface ─────────────────────────────────────
 
-    def similarity_search(self, query_embedding: List[float], top_k: int = 5) -> List[DocumentChunk]:
-        """Your part: Queries ChromaDB using the embedded question vector and returns top-k chunks."""
+    def add_documents(self, documents: list[Document]) -> list[str]:
+        """Embed and persist *documents*. Returns the generated IDs."""
+        if not documents:
+            logger.warning("add_documents called with an empty list.")
+            return []
+
+        ids = self._vectorstore.add_documents(documents)
+        logger.info(
+            "Stored %d documents (total now: %d).",
+            len(ids),
+            self.document_count(),
+        )
+        return ids
+
+    def similarity_search(
+        self, query_embedding: list[float], top_k: int = 5
+    ) -> list[DocumentChunk]:
+        """Query ChromaDB using a pre-computed embedding vector and return top-k chunks."""
         if not query_embedding:
             raise ValueError("query_embedding cannot be empty.")
 
-        results = self.collection.query(
+        results = self._vectorstore._collection.query(
             query_embeddings=[query_embedding],
             n_results=top_k,
-            include=["documents", "metadatas", "distances"]
+            include=["documents", "metadatas", "distances"],
         )
 
-        retrieved_chunks: List[DocumentChunk] = []
+        retrieved_chunks: list[DocumentChunk] = []
 
         # Chroma wraps single-query results in an outer list
         ids = results.get("ids", [[]])[0]
