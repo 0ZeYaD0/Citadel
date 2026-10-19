@@ -21,6 +21,7 @@ class Settings:
 	chroma_persist_dir: Path = Path("chroma_db")
 	chroma_collection_name: str = "citadel_docs"
 	embedding_model: str = "models/gemini-embedding-001"
+	chat_model: str = "gemini-3.8-flash"
 	chunk_size: int = 1000
 	chunk_overlap: int = 200
 
@@ -92,6 +93,7 @@ def get_settings() -> Settings:
 		embedding_model=os.getenv(
 			"EMBEDDING_MODEL", "models/gemini-embedding-001"
 		),
+		chat_model=os.getenv("CHAT_MODEL", "gemini-2.5-flash"),
 		chunk_size=chunk_size,
 		chunk_overlap=chunk_overlap,
 	)
