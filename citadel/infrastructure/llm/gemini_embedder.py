@@ -9,7 +9,7 @@ from citadel.domain.interfaces import EmbeddingProvider
 class GeminiEmbedder(EmbeddingProvider):
     """Generates embedding vectors via Google's Gemini API.
 
-    Uses the ``text-embedding-004`` model by default (configurable in Settings).
+    Uses the ``gemini-embedding-001`` model by default (configurable in Settings).
     """
 
     def __init__(

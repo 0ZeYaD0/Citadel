@@ -61,3 +61,8 @@ class VectorRepository(ABC):
     @abstractmethod
     def delete_collection(self) -> None:
         """Delete the entire collection (useful for re-ingestion)."""
+
+
+# Compatibility names retained for callers from the earlier search branch.
+IEmbedder = EmbeddingProvider
+IVectorRepository = VectorRepository

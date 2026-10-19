@@ -1,6 +1,7 @@
 """ChromaDB-backed vector repository using langchain-chroma."""
 
 import logging
+from uuid import uuid4
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -51,11 +52,54 @@ class ChromaRepository(VectorRepository):
             logger.warning("add_documents called with an empty list.")
             return []
 
-        ids = self._vectorstore.add_documents(documents)
+        ids = [
+            str(document.metadata.get("chunk_id") or uuid4())
+            for document in documents
+        ]
+        existing = self._vectorstore._collection.get(include=["metadatas"])
+        existing_ids = set(existing.get("ids", []))
+        existing_chunk_ids = {
+            metadata.get("chunk_id")
+            for metadata in existing.get("metadatas", [])
+            if metadata and metadata.get("chunk_id")
+        }
+        pending_documents = [
+            document for document, document_id in zip(documents, ids)
+            if document_id not in existing_ids
+            and document.metadata.get("chunk_id") not in existing_chunk_ids
+        ]
+        pending_ids = [
+            document_id
+            for document, document_id in zip(documents, ids)
+            if document_id not in existing_ids
+            and document.metadata.get("chunk_id") not in existing_chunk_ids
+        ]
+        if pending_documents:
+            self._vectorstore.add_documents(pending_documents, ids=pending_ids)
         logger.info(
             "Stored %d documents (total now: %d).",
-            len(ids),
+            len(pending_documents),
             self.document_count(),
+        )
+        return ids
+
+    def add_chunks(
+        self,
+        chunks: list[DocumentChunk],
+        embeddings: list[list[float]],
+    ) -> list[str]:
+        """Store domain chunks with caller-provided embeddings."""
+        if len(chunks) != len(embeddings):
+            raise ValueError("chunks and embeddings must have the same length.")
+        if not chunks:
+            return []
+
+        ids = [chunk.id for chunk in chunks]
+        self._vectorstore._collection.add(
+            ids=ids,
+            documents=[chunk.content for chunk in chunks],
+            metadatas=[chunk.metadata for chunk in chunks],
+            embeddings=embeddings,
         )
         return ids
 
@@ -93,3 +137,16 @@ class ChromaRepository(VectorRepository):
             )
 
         return retrieved_chunks
+
+    def document_count(self) -> int:
+        """Return the number of documents in the collection."""
+        return self._vectorstore._collection.count()
+
+    def delete_collection(self) -> None:
+        """Delete all documents while keeping the repository usable."""
+        self._vectorstore.delete_collection()
+        self._vectorstore = Chroma(
+            collection_name=self._collection_name,
+            embedding_function=self._embedder.langchain_embeddings,
+            persist_directory=self._persist_dir,
+        )

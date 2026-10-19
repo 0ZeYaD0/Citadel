@@ -10,6 +10,8 @@ from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 
+from citadel.core.config import settings
+
 # Load environment variables (GEMINI_API_KEY)
 load_dotenv()
 
@@ -31,23 +33,25 @@ def load_rag_pipeline():
     """Loads the vector database and LLM chain when the server starts."""
     global rag_chain
 
-    if not os.path.exists("./chroma_db"):
-        print("WARNING: ./chroma_db not found. Please run ingestion.py first.")
+    persist_directory = str(settings.chroma_persist_dir)
+    if not os.path.exists(persist_directory):
+        print(f"WARNING: {persist_directory} not found. Please run ingestion first.")
         return
 
     vectorstore = Chroma(
-        persist_directory="./chroma_db",
+        collection_name=settings.chroma_collection_name,
+        persist_directory=persist_directory,
         embedding_function=GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
-            google_api_key=os.getenv("GEMINI_API_KEY")
+            model=settings.embedding_model,
+            google_api_key=settings.gemini_api_key
         )
     )
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model="gemini-3.8-flash",
         temperature=0,
-        google_api_key=os.getenv("GEMINI_API_KEY")
+        google_api_key=settings.gemini_api_key
     )
 
     system_prompt = (

@@ -16,11 +16,33 @@ load_dotenv()
 class Settings:
 	"""Runtime settings loaded from environment variables."""
 
-	GEMINI_API_KEY: str
-	TEXTBOOKS_DIR: Path = Path("data/textbooks")
-	CHROMA_PERSIST_DIR: Path = Path("chroma_db")
-	CHUNK_SIZE: int = 1000
-	CHUNK_OVERLAP: int = 200
+	gemini_api_key: str = ""
+	textbooks_dir: Path = Path("data/textbooks")
+	chroma_persist_dir: Path = Path("chroma_db")
+	chroma_collection_name: str = "citadel_docs"
+	embedding_model: str = "models/gemini-embedding-001"
+	chunk_size: int = 1000
+	chunk_overlap: int = 200
+
+	@property
+	def GEMINI_API_KEY(self) -> str:
+		return self.gemini_api_key
+
+	@property
+	def TEXTBOOKS_DIR(self) -> Path:
+		return self.textbooks_dir
+
+	@property
+	def CHROMA_PERSIST_DIR(self) -> Path:
+		return self.chroma_persist_dir
+
+	@property
+	def CHUNK_SIZE(self) -> int:
+		return self.chunk_size
+
+	@property
+	def CHUNK_OVERLAP(self) -> int:
+		return self.chunk_overlap
 
 
 def _read_int(name: str, default: int) -> int:
@@ -52,10 +74,6 @@ def get_settings() -> Settings:
 	import os
 
 	api_key = os.getenv("GEMINI_API_KEY", "").strip()
-	if not api_key or api_key == "your_gemini_api_key_here":
-		raise ConfigurationError(
-			"GEMINI_API_KEY must be set to a valid Gemini API key."
-		)
 
 	chunk_size = _read_int("CHUNK_SIZE", 1000)
 	chunk_overlap = _read_int("CHUNK_OVERLAP", 200)
@@ -63,11 +81,20 @@ def get_settings() -> Settings:
 		raise ConfigurationError("CHUNK_OVERLAP must be less than CHUNK_SIZE.")
 
 	return Settings(
-		GEMINI_API_KEY=api_key,
-		TEXTBOOKS_DIR=Path(os.getenv("TEXTBOOKS_DIR", "data/textbooks")),
-		CHROMA_PERSIST_DIR=Path(
+		gemini_api_key=api_key,
+		textbooks_dir=Path(os.getenv("TEXTBOOKS_DIR", "data/textbooks")),
+		chroma_persist_dir=Path(
 			os.getenv("CHROMA_PERSIST_DIR", "chroma_db")
 		),
-		CHUNK_SIZE=chunk_size,
-		CHUNK_OVERLAP=chunk_overlap,
+		chroma_collection_name=os.getenv(
+			"CHROMA_COLLECTION_NAME", "citadel_docs"
+		),
+		embedding_model=os.getenv(
+			"EMBEDDING_MODEL", "models/gemini-embedding-001"
+		),
+		chunk_size=chunk_size,
+		chunk_overlap=chunk_overlap,
 	)
+
+
+settings = get_settings()
