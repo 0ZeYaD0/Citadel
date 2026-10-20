@@ -1,17 +1,18 @@
+import logging
 import os
+import re
+from dataclasses import asdict
+
 import logging
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
-from dotenv import load_dotenv
-
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain_chroma import Chroma
-from langchain_classic.chains import create_retrieval_chain
-from langchain_classic.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
 
 from citadel.core.config import settings
+from citadel.core.exceptions import EmptyQuestionError, GenerationError
+from citadel.infrastructure.llm.groq_generator import GroqAnswerGenerator
+from citadel.infrastructure.llm.local_embedder import LocalEmbedder
+from citadel.infrastructure.vectorstore.chroma_repository import ChromaRepository
 
 logger = logging.getLogger(__name__)
 
@@ -28,26 +29,56 @@ app = FastAPI(
 class UserQuery(BaseModel):
     question: str
 
-# Global variable to store the loaded RAG pipeline
-rag_chain = None
+# Components are initialized during application startup after configuration and
+# the persisted Chroma collection have been validated.
+query_embedder: LocalEmbedder | None = None
+vector_repository: ChromaRepository | None = None
+answer_generator: GroqAnswerGenerator | None = None
+
+
+def _extract_chapter_number(question: str) -> int | None:
+    """Extract an explicit chapter number from a student question."""
+    match = re.search(r"\bchapter\s+(\d+)\b", question, re.IGNORECASE)
+    return int(match.group(1)) if match else None
 
 @app.on_event("startup")
 def load_rag_pipeline():
-    """Loads the vector database and LLM chain when the server starts."""
-    global rag_chain
+    """Load the embedding, retrieval, and grounded-generation components."""
+    global answer_generator, query_embedder, vector_repository
 
     persist_directory = str(settings.chroma_persist_dir)
     if not os.path.exists(persist_directory):
         print(f"WARNING: {persist_directory} not found. Please run ingestion first.")
         return
 
-    vectorstore = Chroma(
-        collection_name=settings.chroma_collection_name,
-        persist_directory=persist_directory,
-        embedding_function=GoogleGenerativeAIEmbeddings(
-            model=settings.embedding_model,
-            google_api_key=settings.gemini_api_key
+    try:
+        query_embedder = LocalEmbedder()
+        vector_repository = ChromaRepository(
+            embedder=query_embedder,
+            persist_directory=persist_directory,
+            collection_name=settings.chroma_collection_name,
         )
+        answer_generator = GroqAnswerGenerator()
+        logger.info(
+            "RAG pipeline loaded with chat model: %s and %d stored chunks",
+            settings.groq_model,
+            vector_repository.document_count(),
+        )
+    except Exception:
+        logger.exception("Failed to initialize the RAG pipeline")
+        query_embedder = None
+        vector_repository = None
+        answer_generator = None
+
+
+@app.get("/health")
+def health_check() -> dict[str, str]:
+    """Report whether the retrieval and generation pipeline is ready."""
+    ready = all((query_embedder, vector_repository, answer_generator))
+    return {
+        "status": "ok" if ready else "not_ready",
+        "pipeline": "ready" if ready else "not_initialized",
+    }
     )
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
@@ -78,11 +109,40 @@ def load_rag_pipeline():
 @app.post("/ask")
 def ask_question(query: UserQuery):
     """Endpoint to submit a query to the RAG system."""
-    if rag_chain is None:
+    if query_embedder is None or vector_repository is None or answer_generator is None:
         raise HTTPException(
-            status_code=500, 
-            detail="RAG pipeline not initialized. Ensure ingestion.py was run."
+            status_code=503,
+            detail="RAG pipeline is not ready. Check that ingestion completed successfully.",
         )
+
+    if not query.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    try:
+        query_embedding = query_embedder.embed_query(query.question)
+        chapter_number = _extract_chapter_number(query.question)
+        metadata_filter = (
+            {"chapter_number": chapter_number}
+            if chapter_number is not None
+            else None
+        )
+        context_chunks = vector_repository.similarity_search(
+            query_embedding,
+            top_k=settings.retrieval_top_k,
+            metadata_filter=metadata_filter,
+        )
+        response = answer_generator.generate_grounded_answer(
+            query.question,
+            context_chunks,
+        )
+        return asdict(response)
+    except EmptyQuestionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GenerationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(
+            "RAG request failed",
     
     try:
         response = rag_chain.invoke({"input": query.question})
@@ -97,24 +157,19 @@ def ask_question(query: UserQuery):
             raise HTTPException(
                 status_code=503,
                 detail=(
-                    "Gemini is temporarily unavailable. "
-                    "Please retry shortly or choose another CHAT_MODEL."
+                    "The LLM provider is temporarily unavailable. "
+                    "Please retry shortly."
                 ),
             ) from exc
         if "429" in message or "RESOURCE_EXHAUSTED" in message:
             raise HTTPException(
                 status_code=429,
-                detail="Gemini quota is currently exhausted. Please retry later.",
+                detail="LLM quota is currently exhausted. Please retry later.",
             ) from exc
         raise HTTPException(
             status_code=502,
-            detail="The Gemini response could not be generated.",
+            detail="The RAG request could not be completed.",
         ) from exc
-    
-    return {
-        "question": query.question, 
-        "answer": response["answer"]
-    }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

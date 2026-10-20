@@ -1,6 +1,6 @@
 # Citadel
 
-Citadel is a Gemini Notebook-inspired study assistant. A student can upload or
+Citadel is a Notebook-inspired study assistant. A student can upload or
 add a textbook to the system and ask questions about its contents. The assistant
 searches the textbook for relevant passages and uses them to produce a grounded
 answer instead of relying only on general knowledge.
@@ -21,9 +21,9 @@ say so rather than inventing information.
 ## How it works
 
 1. The textbook is split into smaller pieces of text.
-2. The pieces are converted into embeddings and stored in a Chroma vector database.
+2. The pieces are embedded locally with `all-MiniLM-L6-v2` and stored in Chroma.
 3. A student's question is used to retrieve the most relevant textbook passages.
-4. The language model generates an answer using those passages as context.
+4. Groq generates an answer using those passages as context.
 
 ## Setup
 
@@ -35,18 +35,28 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-Create a `.env` file and add your API key:
+Create a `.env` file and add your Groq API key:
 
 ```env
-GEMINI_API_KEY=your_gemini_api_key_here
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=llama-3.3-70b-versatile
+LOCAL_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 ```
 
-The application uses Gemini for both embeddings and chat responses. Replace the
-placeholder with your actual Gemini API key and keep the `.env` file private.
+The local embedding model runs on CPU and does not use an API quota. Groq is
+used only for answer generation. Keep the `.env` file private.
 
 ## Running the API
 
-After the textbook has been ingested into `chroma_db`, start the server:
+Because the embedding provider changed, rebuild the old Gemini Chroma database
+once. This removes only the generated vector store, not the textbook:
+
+```powershell
+Remove-Item -Recurse -Force .\chroma_db -ErrorAction SilentlyContinue
+python ingest_data.py data\textbooks\pythonlearn.pdf
+```
+
+After ingestion completes, start the server:
 
 ```powershell
 python app.py

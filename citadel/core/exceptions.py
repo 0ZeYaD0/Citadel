@@ -15,3 +15,11 @@ class DocumentIngestionError(CitadelBaseError):
 
 class EmptyDatasetError(DocumentIngestionError):
 	"""Raised when no supported, non-empty documents are available."""
+
+
+class GenerationError(CitadelBaseError):
+	"""Raised when a grounded answer cannot be generated."""
+
+
+class EmptyQuestionError(GenerationError):
+	"""Raised when a student submits a blank question."""
