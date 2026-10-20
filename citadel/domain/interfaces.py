@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List
+from typing import Any, List
 
 from langchain_core.documents import Document
 
@@ -26,7 +26,7 @@ from typing import Optional
 
 from langchain_core.documents import Document
 
-from citadel.domain.models import DocumentChunk
+from citadel.domain.models import DocumentChunk, RAGResponse
 
 
 class EmbeddingProvider(ABC):
@@ -50,9 +50,12 @@ class VectorRepository(ABC):
 
     @abstractmethod
     def similarity_search(
-        self, query_embedding: list[float], top_k: int = 5
+        self,
+        query_embedding: list[float],
+        top_k: int = 5,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> list[DocumentChunk]:
-        """Query the store with a pre-computed embedding vector and return top-k chunks."""
+        """Query the store with an embedding and optional metadata filter."""
 
     @abstractmethod
     def document_count(self) -> int:
@@ -66,3 +69,16 @@ class VectorRepository(ABC):
 # Compatibility names retained for callers from the earlier search branch.
 IEmbedder = EmbeddingProvider
 IVectorRepository = VectorRepository
+
+
+class BaseAnswerGenerator(ABC):
+    """Port for generating answers grounded in retrieved textbook chunks."""
+
+    @abstractmethod
+    def generate_grounded_answer(
+        self,
+        query: str,
+        context_chunks: List[DocumentChunk],
+    ) -> RAGResponse:
+        """Generate a strictly grounded answer from retrieved chunks."""
+        raise NotImplementedError

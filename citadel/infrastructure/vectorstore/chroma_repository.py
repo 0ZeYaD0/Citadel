@@ -1,6 +1,7 @@
 """ChromaDB-backed vector repository using langchain-chroma."""
 
 import logging
+from typing import Any
 from uuid import uuid4
 
 from langchain_chroma import Chroma
@@ -9,7 +10,7 @@ from langchain_core.documents import Document
 from citadel.core.config import settings
 from citadel.domain.interfaces import VectorRepository
 from citadel.domain.models import DocumentChunk
-from citadel.infrastructure.llm.gemini_embedder import GeminiEmbedder
+from citadel.infrastructure.llm.local_embedder import LocalEmbedder
 
 logger = logging.getLogger(__name__)
 
@@ -17,17 +18,17 @@ logger = logging.getLogger(__name__)
 class ChromaRepository(VectorRepository):
     """Persists and queries document embeddings in a local ChromaDB store.
 
-    The repository owns its ``GeminiEmbedder`` instance so that embedding
+    The repository owns its ``LocalEmbedder`` instance so that embedding
     model and vector store always stay in sync.
     """
 
     def __init__(
         self,
-        embedder: GeminiEmbedder | None = None,
+        embedder: LocalEmbedder | None = None,
         persist_directory: str | None = None,
         collection_name: str | None = None,
     ) -> None:
-        self._embedder = embedder or GeminiEmbedder()
+        self._embedder = embedder or LocalEmbedder()
         self._persist_dir = persist_directory or settings.chroma_persist_dir
         self._collection_name = collection_name or settings.chroma_collection_name
 
@@ -104,17 +105,24 @@ class ChromaRepository(VectorRepository):
         return ids
 
     def similarity_search(
-        self, query_embedding: list[float], top_k: int = 5
+        self,
+        query_embedding: list[float],
+        top_k: int = 5,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> list[DocumentChunk]:
-        """Query ChromaDB using a pre-computed embedding vector and return top-k chunks."""
+        """Query ChromaDB using an embedding and optional metadata filter."""
         if not query_embedding:
             raise ValueError("query_embedding cannot be empty.")
 
-        results = self._vectorstore._collection.query(
-            query_embeddings=[query_embedding],
-            n_results=top_k,
-            include=["documents", "metadatas", "distances"],
-        )
+        query_kwargs: dict[str, Any] = {
+            "query_embeddings": [query_embedding],
+            "n_results": top_k,
+            "include": ["documents", "metadatas", "distances"],
+        }
+        if metadata_filter:
+            query_kwargs["where"] = metadata_filter
+
+        results = self._vectorstore._collection.query(**query_kwargs)
 
         retrieved_chunks: list[DocumentChunk] = []
 
