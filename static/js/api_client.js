@@ -15,9 +15,16 @@ const CitadelAPI = {
         method: "POST",
         body: formData,
       });
-      if (!response.ok) throw new Error("Using local reader");
+      if (!response.ok) {
+        const detail = await response.text();
+        console.warn("Upload API returned error:", response.status, detail);
+        throw new Error("Upload failed");
+      }
       return await response.json();
     } catch (err) {
+      // Graceful client-side fallback: parse files locally so the UI still
+      // works even when the backend pipeline is not ready.
+      console.warn("Upload endpoint unavailable, reading files locally:", err.message);
       const parsedSources = await Promise.all(
         Array.from(files).map(async (file, idx) => {
           const text = await this._readFileAsText(file);
@@ -45,9 +52,32 @@ const CitadelAPI = {
         }),
       });
 
-      if (!response.ok) throw new Error("Using local notebook preview");
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        const detail = errorBody.detail || `Server returned ${response.status}`;
+        console.warn("Query API error:", detail);
+
+        // Show user-friendly error messages for common status codes
+        if (response.status === 503) {
+          return {
+            answer:
+              "The RAG pipeline is still warming up. Please wait a moment and try again.",
+          };
+        }
+        if (response.status === 502) {
+          return {
+            answer:
+              "There was a problem generating an answer. Please try rephrasing your question or try again shortly.",
+          };
+        }
+        throw new Error(detail);
+      }
+
       return await response.json();
     } catch (err) {
+      console.warn("Query endpoint unavailable, using local preview:", err.message);
+
+      // Local fallback for when the backend is offline
       await new Promise((r) => setTimeout(r, 450));
 
       if (activeSources.length === 0) {
