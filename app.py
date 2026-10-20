@@ -3,6 +3,7 @@ import os
 import re
 from dataclasses import asdict
 
+import logging
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
@@ -14,6 +15,9 @@ from citadel.infrastructure.llm.local_embedder import LocalEmbedder
 from citadel.infrastructure.vectorstore.chroma_repository import ChromaRepository
 
 logger = logging.getLogger(__name__)
+
+# Load environment variables (GEMINI_API_KEY)
+load_dotenv()
 
 app = FastAPI(
     title="RAG System API",
@@ -75,6 +79,32 @@ def health_check() -> dict[str, str]:
         "status": "ok" if ready else "not_ready",
         "pipeline": "ready" if ready else "not_initialized",
     }
+    )
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+
+    llm = ChatGoogleGenerativeAI(
+        model=settings.chat_model,
+        temperature=0,
+        google_api_key=settings.gemini_api_key
+    )
+
+    system_prompt = (
+        "You are an expert assistant strictly relying on the provided context. "
+        "Use the following pieces of retrieved context to answer the question. "
+        "If the answer is not in the context, explicitly state that you do not know. "
+        "Do not hallucinate external information."
+        "\n\n"
+        "Context: {context}"
+    )
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("human", "{input}"),
+    ])
+    
+    qa_chain = create_stuff_documents_chain(llm, prompt)
+    rag_chain = create_retrieval_chain(retriever, qa_chain)
+    logger.info("RAG pipeline loaded with chat model: %s", settings.chat_model)
 
 @app.post("/ask")
 def ask_question(query: UserQuery):
@@ -113,6 +143,13 @@ def ask_question(query: UserQuery):
     except Exception as exc:
         logger.exception(
             "RAG request failed",
+    
+    try:
+        response = rag_chain.invoke({"input": query.question})
+    except Exception as exc:
+        logger.exception(
+            "Gemini response generation failed using model %s: %s",
+            settings.chat_model,
             exc,
         )
         message = str(exc).upper()

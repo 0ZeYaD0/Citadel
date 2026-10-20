@@ -44,3 +44,6 @@ Thumbs.db
 *.swp
 *.swo
 data/
+citadel/domain/__pycache__/interfaces.cpython-314.pyc
+citadel/domain/__pycache__/models.cpython-314.pyc
+citadel/services/__pycache__/ingestion_service.cpython-314.pyc
