@@ -15,6 +15,12 @@ from citadel.core.logger import get_logger
 from citadel.domain.interfaces import BaseDocumentProcessor
 
 
+_CHAPTER_HEADING = re.compile(
+	 r"^\s*(?:\d+\s+)?CHAPTER\s+(\d+)\.\s*([^\r\n]+)",
+	 re.IGNORECASE | re.MULTILINE,
+)
+
+
 class TextbookDocumentProcessor(BaseDocumentProcessor):
 	"""Load PDFs and text files into deterministic LangChain documents."""
 
@@ -90,7 +96,12 @@ class TextbookDocumentProcessor(BaseDocumentProcessor):
 		self._logger.info("Produced %d total textbook chunks", len(chunks))
 		return chunks
 
-	def process_single_file(self, file_path: Path) -> List[Document]:
+	def process_single_file(
+		self,
+		file_path: Path,
+		source_name: str | None = None,
+		document_id: str | None = None,
+	) -> List[Document]:
 		"""Load and split one PDF, Markdown, or text file."""
 		if not file_path.is_file() or file_path.suffix.lower() not in self._SUPPORTED_SUFFIXES:
 			raise DocumentIngestionError(
@@ -99,6 +110,7 @@ class TextbookDocumentProcessor(BaseDocumentProcessor):
 
 		try:
 			documents = self._load_documents(file_path)
+			documents = self._add_chapter_metadata(documents)
 			normalized_documents = [
 				self._normalize_document(document) for document in documents
 			]
@@ -108,7 +120,12 @@ class TextbookDocumentProcessor(BaseDocumentProcessor):
 				if document.page_content.strip()
 			]
 			split_documents = self._splitter.split_documents(normalized_documents)
-			chunks = self._to_langchain_chunks(file_path, split_documents)
+			chunks = self._to_langchain_chunks(
+				file_path,
+				split_documents,
+				source_name=source_name,
+				document_id=document_id,
+			)
 			self._logger.info(
 				"Processed %s: %d source pages/documents, %d chunks",
 				file_path.name,
@@ -122,6 +139,33 @@ class TextbookDocumentProcessor(BaseDocumentProcessor):
 			raise DocumentIngestionError(
 				f"Failed to process textbook file {file_path}: {exc}"
 			) from exc
+
+	@staticmethod
+	def _add_chapter_metadata(documents: List[Document]) -> List[Document]:
+		"""Propagate chapter headings to following pages or source documents."""
+		annotated_documents: List[Document] = []
+		chapter_number: int | None = None
+		chapter_title: str | None = None
+
+		for document in documents:
+			match = _CHAPTER_HEADING.search(document.page_content)
+			if match:
+				chapter_number = int(match.group(1))
+				chapter_title = match.group(2).strip().title()
+
+			metadata = dict(document.metadata)
+			if chapter_number is not None and chapter_title is not None:
+				metadata.update(
+					{
+						"chapter_number": chapter_number,
+						"chapter_title": chapter_title,
+					}
+				)
+			annotated_documents.append(
+				Document(page_content=document.page_content, metadata=metadata)
+			)
+
+		return annotated_documents
 
 	def _load_documents(self, file_path: Path) -> List[Document]:
 		"""Load LangChain documents using the loader for a file type."""
@@ -141,10 +185,12 @@ class TextbookDocumentProcessor(BaseDocumentProcessor):
 		self,
 		file_path: Path,
 		documents: List[Document],
+		source_name: str | None = None,
+		document_id: str | None = None,
 	) -> List[Document]:
 		"""Add deterministic IDs and domain metadata to LangChain documents."""
 		chunks: List[Document] = []
-		source_file = file_path.name
+		source_file = source_name or file_path.name
 		for chunk_index, document in enumerate(documents):
 			content = document.page_content.strip()
 			if not content:
@@ -159,6 +205,7 @@ class TextbookDocumentProcessor(BaseDocumentProcessor):
 				{
 					"chunk_id": chunk_id,
 					"source_file": source_file,
+					"document_id": document_id or source_file,
 					"page_number": page_number,
 					"chunk_index": chunk_index,
 					"total_char_length": len(content),

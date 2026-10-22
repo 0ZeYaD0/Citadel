@@ -16,7 +16,12 @@ class BaseDocumentProcessor(ABC):
 		raise NotImplementedError
 
 	@abstractmethod
-	def process_single_file(self, file_path: Path) -> List[Document]:
+	def process_single_file(
+		self,
+		file_path: Path,
+		source_name: str | None = None,
+		document_id: str | None = None,
+	) -> List[Document]:
 		"""Load one supported file into LangChain document chunks."""
 		raise NotImplementedError
 """Abstract interfaces (ports) for the Citadel RAG system."""
@@ -64,6 +69,11 @@ class VectorRepository(ABC):
     @abstractmethod
     def delete_collection(self) -> None:
         """Delete the entire collection (useful for re-ingestion)."""
+
+    @abstractmethod
+    def delete_documents(self, document_id: str) -> int:
+        """Delete all chunks belonging to a document and return their count."""
+        raise NotImplementedError
 
 
 # Compatibility names retained for callers from the earlier search branch.

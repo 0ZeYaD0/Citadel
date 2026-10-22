@@ -97,6 +97,17 @@ const CitadelAPI = {
     }
   },
 
+  async deleteDocument(documentId) {
+    const response = await fetch(
+      `${this.baseUrl}/api/documents/${encodeURIComponent(documentId)}`,
+      { method: "DELETE" }
+    );
+    if (!response.ok) {
+      throw new Error("Document deletion failed");
+    }
+    return await response.json();
+  },
+
   _readFileAsText(file) {
     return new Promise((resolve) => {
       if (
@@ -112,7 +123,7 @@ const CitadelAPI = {
         resolve(
           `Document "${file.name}" (${(file.size / 1024).toFixed(
             1
-          )} KB) is sitting on your desk and ready to be indexed by ingest_data.py.`
+          )} KB) is ready to be indexed when the upload service is available.`
         );
       }
     });
