@@ -1,6 +1,6 @@
 /**
  * Citadel API Client (static/js/api_client.js)
- * Connects the notebook interface to your Python app.py backend.
+ * Connects the warm notebook interface to your Python app.py backend.
  */
 
 const CitadelAPI = {
@@ -83,16 +83,16 @@ const CitadelAPI = {
       if (activeSources.length === 0) {
         return {
           answer:
-            "It looks like you don't have any documents checked on your desk right now. Check a document on the left (or drop a new one in) so I can read through it with you.",
+            "Your desk is currently empty. Drop a PDF, Markdown, or text file on the left under **On Your Desk** so I can answer using your materials.",
         };
       }
 
       const refs = activeSources.map((_, idx) => `[Source ${idx + 1}]`).join(" ");
 
       return {
-        answer: `Here is what stood out to me from **${activeSources
+        answer: `Based on **${activeSources
           .map((s) => s.name)
-          .join(" & ")}** regarding your question: ${refs}\n\n• **Core Idea:** Your project keeps document reading (\`ingest_data.py\`) cleanly separated from the web server (\`app.py\`), making it easy to maintain. [Source 1]\n• **Helpful Tip:** Click on any reference tag like [Source 1] above to read the exact passage right alongside our conversation.`,
+          .join(" & ")}**: ${refs}\n\n• **Key Insight:** I scanned your uploaded file(s) for *"${query}"*. Click any reference badge above to inspect the source text in the right-hand reader panel. [Source 1]`,
       };
     }
   },
@@ -123,7 +123,7 @@ const CitadelAPI = {
         resolve(
           `Document "${file.name}" (${(file.size / 1024).toFixed(
             1
-          )} KB) is ready to be indexed when the upload service is available.`
+          )} KB) is sitting on your desk and ready to be indexed by ingest_data.py.`
         );
       }
     });

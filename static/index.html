@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="coral-lemonade">
+<html lang="en" data-theme="sunset-horizon">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Citadel — Your Personal Study</title>
+  <title>Citadel — Personal Study & Notebooks</title>
   <!-- Editorial Fonts: Newsreader (Serif) + Plus Jakarta Sans (Sans) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,34 +12,95 @@
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-  <div class="upload-progress-overlay hidden" id="uploadProgressOverlay" role="status" aria-live="polite">
-    <div class="upload-progress-card">
-      <div class="upload-progress-icon" aria-hidden="true">
-        <span></span>
-      </div>
-      <p class="upload-progress-eyebrow">CITADEL IS READING</p>
-      <h2 id="uploadProgressTitle">Adding your resources</h2>
-      <p id="uploadProgressMessage">Preparing your documents...</p>
-      <div class="upload-progress-track" aria-hidden="true">
-        <div class="upload-progress-fill"></div>
-      </div>
-      <p class="upload-progress-detail" id="uploadProgressDetail"></p>
-    </div>
-  </div>
 
-  <div class="study-layout">
-    
-    <!-- ================= LEFT BOOKSHELF (Documents & Past Pages) ================= -->
-    <aside class="bookshelf" id="sidebar">
-      <div class="bookshelf-header">
+  <!-- ================= VIEW 1: NOTEBOOK-LM STYLE WELCOME HUB ================= -->
+  <div class="hub-view" id="homeHubView">
+    <nav class="hub-navbar">
+      <div class="hub-nav-left">
         <div class="notebook-brand">
           <div class="brand-mark">C</div>
           <div class="brand-text">
             <span class="brand-name">Citadel</span>
-            <span class="brand-subtitle">Personal Study</span>
+            <span class="brand-subtitle">Personal Study & Notebooks</span>
           </div>
         </div>
-        <button class="new-page-btn" id="newChatBtn" title="Start a fresh page">
+        <div class="hub-tabs">
+          <button class="hub-tab active" data-filter="all">All</button>
+          <button class="hub-tab" data-filter="my">My notebooks</button>
+          <button class="hub-tab" data-filter="featured">Featured</button>
+        </div>
+      </div>
+
+      <div class="hub-nav-right">
+        <div class="hub-search-box">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="hubSearchInput" placeholder="Search notebooks..." />
+        </div>
+
+        <div class="hub-theme-swatches">
+          <button class="swatch-btn" data-theme="matcha" data-name="Matcha Sage" title="Matcha Sage (Light)">
+            <span class="swatch-split" style="background: linear-gradient(135deg, #EBF3ED 50%, #108548 50%);"></span>
+          </button>
+          <button class="swatch-btn" data-theme="coral-lemonade" data-name="Coral Lemonade" title="Coral Lemonade (Light)">
+            <span class="swatch-split" style="background: linear-gradient(135deg, #FFF685 0%, #F75990 50%, #FF1D58 100%);"></span>
+          </button>
+          <button class="swatch-btn" data-theme="electric-lagoon" data-name="Electric Lagoon" title="Electric Lagoon (Light)">
+            <span class="swatch-split" style="background: linear-gradient(135deg, #00DDFF 0%, #0049B7 75%, #FFF685 100%);"></span>
+          </button>
+          <button class="swatch-btn active" data-theme="sunset-horizon" data-name="Sunset Horizon" title="Sunset Horizon (Dark)">
+            <span class="swatch-split" style="background: linear-gradient(135deg, #181A2F 45%, #FDA481 100%);"></span>
+          </button>
+          <button class="swatch-btn" data-theme="crimson-dusk" data-name="Crimson Dusk" title="Crimson Dusk (Dark)">
+            <span class="swatch-split" style="background: linear-gradient(135deg, #242E49 45%, #B4182D 100%);"></span>
+          </button>
+          <button class="swatch-btn" data-theme="velvet-ember" data-name="Velvet Ember" title="Velvet Ember (Dark)">
+            <span class="swatch-split" style="background: linear-gradient(135deg, #54162B 45%, #FDA481 100%);"></span>
+          </button>
+        </div>
+
+        <button class="create-notebook-btn" id="createNotebookBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          <span>New Notebook</span>
+        </button>
+      </div>
+    </nav>
+
+    <div class="hub-container">
+      <section class="hub-section" id="featuredSection">
+        <div class="hub-section-header">
+          <h2>Featured Notebooks</h2>
+        </div>
+        <div class="featured-grid" id="featuredGrid"></div>
+      </section>
+
+      <section class="hub-section" id="recentSection">
+        <div class="hub-section-header">
+          <h2>Recent Notebooks</h2>
+        </div>
+        <div class="recent-grid" id="recentGrid"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ================= VIEW 2: STUDY WORKSPACE ================= -->
+  <div class="study-layout hidden" id="workspaceView">
+    
+    <!-- LEFT BOOKSHELF (Documents & Past Pages) -->
+    <aside class="bookshelf" id="sidebar">
+      <div class="bookshelf-header">
+        <div class="notebook-brand clickable-brand" id="backToHubBrand" title="Back to All Notebooks">
+          <div class="brand-mark">C</div>
+          <div class="brand-text">
+            <span class="brand-name">Citadel</span>
+            <span class="brand-subtitle">← All Notebooks</span>
+          </div>
+        </div>
+        <button class="new-page-btn" id="newChatBtn" title="Start a fresh notebook">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
             <path d="M12 5v14M5 12h14"/>
           </svg>
@@ -83,34 +144,28 @@
         <div class="pages-list" id="historyList"></div>
       </div>
 
-      <!-- Theme Swatch Bar (3 Light + 3 Dark) -->
+      <!-- Theme Swatch Bar -->
       <div class="bookshelf-footer">
         <div class="theme-header-row">
           <span class="shelf-label">THEME</span>
-          <span class="theme-current-name" id="themeNameLabel">Coral Lemonade</span>
+          <span class="theme-current-name" id="themeNameLabel">Sunset Horizon</span>
         </div>
-        <div class="theme-swatches" id="themeSwatches">
-          <!-- 1. Matcha Sage (Light Green) -->
+        <div class="theme-swatches">
           <button class="swatch-btn" data-theme="matcha" data-name="Matcha Sage" title="Matcha Sage (Light)">
             <span class="swatch-split" style="background: linear-gradient(135deg, #EBF3ED 50%, #108548 50%);"></span>
           </button>
-          <!-- 2. Coral Lemonade (Light — #FF1D58 + #F75990 + #FFF685) -->
-          <button class="swatch-btn active" data-theme="coral-lemonade" data-name="Coral Lemonade" title="Coral Lemonade (Light)">
+          <button class="swatch-btn" data-theme="coral-lemonade" data-name="Coral Lemonade" title="Coral Lemonade (Light)">
             <span class="swatch-split" style="background: linear-gradient(135deg, #FFF685 0%, #F75990 50%, #FF1D58 100%);"></span>
           </button>
-          <!-- 3. Electric Lagoon (Light — #00DDFF + #0049B7 + #FFF685) -->
           <button class="swatch-btn" data-theme="electric-lagoon" data-name="Electric Lagoon" title="Electric Lagoon (Light)">
             <span class="swatch-split" style="background: linear-gradient(135deg, #00DDFF 0%, #0049B7 75%, #FFF685 100%);"></span>
           </button>
-          <!-- 4. Sunset Horizon (Dark) -->
-          <button class="swatch-btn" data-theme="sunset-horizon" data-name="Sunset Horizon" title="Sunset Horizon (Dark)">
+          <button class="swatch-btn active" data-theme="sunset-horizon" data-name="Sunset Horizon" title="Sunset Horizon (Dark)">
             <span class="swatch-split" style="background: linear-gradient(135deg, #181A2F 45%, #FDA481 100%);"></span>
           </button>
-          <!-- 5. Crimson Dusk (Dark) -->
           <button class="swatch-btn" data-theme="crimson-dusk" data-name="Crimson Dusk" title="Crimson Dusk (Dark)">
             <span class="swatch-split" style="background: linear-gradient(135deg, #242E49 45%, #B4182D 100%);"></span>
           </button>
-          <!-- 6. Velvet Ember (Dark) -->
           <button class="swatch-btn" data-theme="velvet-ember" data-name="Velvet Ember" title="Velvet Ember (Dark)">
             <span class="swatch-split" style="background: linear-gradient(135deg, #54162B 45%, #FDA481 100%);"></span>
           </button>
@@ -118,9 +173,9 @@
       </div>
     </aside>
 
-    <!-- ================= MAIN READING & WRITING DESK ================= -->
+    <!-- MAIN READING & WRITING DESK -->
     <main class="writing-desk">
-      <!-- Animated Silk Wave Background (Visible on open, disappears when typing) -->
+      <!-- Animated Silk Wave Background -->
       <div class="ambient-wave-stage" id="ambientWaveStage">
         <canvas id="waveCanvas"></canvas>
       </div>
@@ -133,18 +188,21 @@
               <line x1="9" y1="3" x2="9" y2="21"></line>
             </svg>
           </button>
-          <span class="notebook-title" id="currentSessionTitle">Morning Reading & Notes</span>
+          <button class="hub-back-pill" id="topBackToHubBtn" title="Return to Notebook Hub">
+            ← Notebooks
+          </button>
+          <span class="notebook-title" id="currentSessionTitle">Untitled Notebook</span>
         </div>
 
         <div class="desk-header-right">
-          <span class="desk-status" id="activeContextCounter">2 documents on desk</span>
+          <span class="desk-status" id="activeContextCounter">No documents selected</span>
           <button class="margin-notes-btn" id="drawerToggleBtn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
             </svg>
             <span>Reader & Notes</span>
-            <span class="saved-count" id="noteCountBadge">1</span>
+            <span class="saved-count" id="noteCountBadge">0</span>
           </button>
         </div>
       </header>
@@ -152,7 +210,7 @@
       <!-- Conversation & Editorial Stream -->
       <div class="notebook-stream" id="chatFeed"></div>
 
-      <!-- ================= THE CENTERPIECE WRITING BOX ================= -->
+      <!-- THE CENTERPIECE WRITING BOX -->
       <div class="composer-container">
         <div class="thought-starters" id="quickChips">
           <button class="starter-pill" data-prompt="Can you give me a clear, simple summary of the main ideas in these documents?">
@@ -196,8 +254,8 @@
       </div>
     </main>
 
-    <!-- ================= RIGHT SIDE PANEL (Document Reader & Bookmarks) ================= -->
-    <aside class="side-reader" id="inspectorDrawer">
+    <!-- RIGHT SIDE PANEL (Document Reader & Bookmarks) -->
+    <aside class="side-reader closed" id="inspectorDrawer">
       <div class="reader-header">
         <div class="reader-tabs">
           <button class="reader-tab active" data-tab="inspector">Document Passage</button>
@@ -215,7 +273,7 @@
       <div class="reader-body" id="inspectorTab">
         <div id="inspectorContent">
           <div class="reader-empty">
-            <p>Click on any document on your desk or a reference badge like <code>Ref 1</code> in your conversation to read the original passage right here.</p>
+            <p>Upload a document on your desk and click it (or any <code>Ref</code> badge in your chat) to read its content here.</p>
           </div>
         </div>
       </div>
@@ -226,6 +284,16 @@
       </div>
     </aside>
 
+  </div>
+
+  <!-- ================= UPLOAD PROGRESS OVERLAY ================= -->
+  <div class="upload-progress-overlay hidden" id="uploadProgressOverlay">
+    <div class="upload-progress-card">
+      <div class="upload-spinner"></div>
+      <h3 id="uploadProgressTitle">Adding your resource</h3>
+      <p id="uploadProgressMessage">Reading your documents...</p>
+      <span id="uploadProgressDetail">1 file selected</span>
+    </div>
   </div>
 
   <!-- Connected to static/js/api_client.js and static/js/ui_controller.js -->
