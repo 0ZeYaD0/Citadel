@@ -158,3 +158,18 @@ class ChromaRepository(VectorRepository):
             embedding_function=self._embedder.langchain_embeddings,
             persist_directory=self._persist_dir,
         )
+
+    def delete_documents(self, document_id: str) -> int:
+        """Delete all chunks associated with one document."""
+        if not document_id.strip():
+            raise ValueError("document_id cannot be empty.")
+
+        matching = self._vectorstore._collection.get(
+            where={"document_id": document_id},
+            include=["metadatas"],
+        )
+        ids = matching.get("ids", [])
+        if ids:
+            self._vectorstore._collection.delete(ids=ids)
+        logger.info("Deleted %d chunks for document %s.", len(ids), document_id)
+        return len(ids)

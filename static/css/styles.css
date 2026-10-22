@@ -920,6 +920,109 @@ body {
   display: none !important;
 }
 
+/* ================= DOCUMENT UPLOAD PROGRESS ================= */
+.upload-progress-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(43, 17, 27, 0.28);
+  backdrop-filter: blur(8px);
+}
+
+.upload-progress-card {
+  width: min(420px, 100%);
+  padding: 34px 32px 30px;
+  text-align: center;
+  color: var(--text-ink);
+  background: var(--bg-card);
+  border: 1px solid var(--border-line);
+  border-radius: 24px;
+  box-shadow: var(--shadow-floating);
+  animation: upload-card-enter 0.35s ease both;
+}
+
+.upload-progress-icon {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+}
+
+.upload-progress-icon span {
+  width: 25px;
+  height: 25px;
+  border: 3px solid var(--border-line);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: upload-spin 0.85s linear infinite;
+}
+
+.upload-progress-eyebrow {
+  margin-bottom: 8px;
+  color: var(--accent-badge-text);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.upload-progress-card h2 {
+  font-size: 21px;
+  letter-spacing: -0.02em;
+}
+
+.upload-progress-card > p:not(.upload-progress-eyebrow):not(.upload-progress-detail) {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.upload-progress-track {
+  height: 7px;
+  margin-top: 24px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--bg-subtle);
+}
+
+.upload-progress-fill {
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-gradient);
+  animation: upload-progress-flow 1.5s ease-in-out infinite;
+}
+
+.upload-progress-detail {
+  min-height: 18px;
+  margin-top: 13px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+body.uploading-documents {
+  overflow: hidden;
+}
+
+@keyframes upload-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes upload-progress-flow {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(245%); }
+}
+
+@keyframes upload-card-enter {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 .reader-empty {
   color: var(--text-muted);
   font-size: 0.85rem;

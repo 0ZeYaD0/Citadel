@@ -1,5 +1,5 @@
 import logging
-import os
+import hashlib
 import re
 import tempfile
 from dataclasses import asdict
@@ -60,12 +60,8 @@ def load_rag_pipeline():
     global answer_generator, query_embedder, vector_repository
     global ingestion_service, document_processor
 
-    persist_directory = str(settings.chroma_persist_dir)
-    if not os.path.exists(persist_directory):
-        print(f"WARNING: {persist_directory} not found. Please run ingestion first.")
-        return
-
     try:
+        persist_directory = str(settings.chroma_persist_dir)
         query_embedder = LocalEmbedder()
         vector_repository = ChromaRepository(
             embedder=query_embedder,
@@ -157,8 +153,19 @@ async def upload_documents(files: List[UploadFile] = File(...)):
 
     sources = []
     for idx, upload in enumerate(files):
+        original_name = Path(upload.filename or "file.txt").name
+        if Path(original_name).suffix.lower() not in {".pdf", ".txt", ".md"}:
+            sources.append({
+                "id": "",
+                "name": original_name,
+                "size": "0.0 KB",
+                "active": False,
+                "error": "Unsupported file type. Supported formats: PDF, TXT, and Markdown.",
+            })
+            continue
+
         # Save to a temp location so the document processor can read it
-        suffix = Path(upload.filename or "file.txt").suffix
+        suffix = Path(original_name).suffix
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=suffix, dir=tempfile.gettempdir()
         ) as tmp:
@@ -167,14 +174,21 @@ async def upload_documents(files: List[UploadFile] = File(...)):
             tmp_path = Path(tmp.name)
 
         try:
+            document_id = hashlib.sha256(
+                original_name.encode("utf-8") + b"\0" + content_bytes
+            ).hexdigest()
             # Process the single file into LangChain Document chunks
-            chunks = document_processor.process_single_file(tmp_path)
+            chunks = document_processor.process_single_file(
+                tmp_path,
+                source_name=original_name,
+                document_id=document_id,
+            )
 
             if not chunks:
                 logger.warning("File %s produced no chunks.", upload.filename)
                 sources.append({
-                    "id": f"doc-{idx}-{upload.filename}",
-                    "name": upload.filename,
+                    "id": document_id,
+                    "name": original_name,
                     "size": f"{len(content_bytes) / 1024:.1f} KB",
                     "active": True,
                     "content": "(No extractable text found in this document.)",
@@ -196,8 +210,8 @@ async def upload_documents(files: List[UploadFile] = File(...)):
                 preview_text += f"\n\n... and {len(chunks) - 3} more passages."
 
             sources.append({
-                "id": f"doc-{idx}-{upload.filename}",
-                "name": upload.filename,
+                "id": document_id,
+                "name": original_name,
                 "size": f"{len(content_bytes) / 1024:.1f} KB",
                 "active": True,
                 "content": preview_text,
@@ -205,8 +219,8 @@ async def upload_documents(files: List[UploadFile] = File(...)):
         except Exception as exc:
             logger.exception("Failed to process uploaded file %s", upload.filename)
             sources.append({
-                "id": f"doc-{idx}-{upload.filename}",
-                "name": upload.filename,
+                "id": document_id,
+                "name": original_name,
                 "size": f"{len(content_bytes) / 1024:.1f} KB",
                 "active": True,
                 "content": f"Could not process file: {exc}",
@@ -219,6 +233,27 @@ async def upload_documents(files: List[UploadFile] = File(...)):
                 pass
 
     return {"status": "ok", "sources": sources}
+
+
+@app.delete("/api/documents/{document_id}")
+def delete_document(document_id: str):
+    """Delete one uploaded document from the vector store."""
+    if ingestion_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG pipeline is not ready. Please try again shortly.",
+        )
+    try:
+        deleted_chunks = ingestion_service.delete_document(document_id)
+        return {"status": "ok", "document_id": document_id, "deleted_chunks": deleted_chunks}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Failed to delete document %s", document_id)
+        raise HTTPException(
+            status_code=502,
+            detail="The document could not be deleted.",
+        ) from exc
 
 
 @app.post("/api/query")
@@ -236,13 +271,29 @@ def query_knowledge_base(request: UIQueryRequest):
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
     try:
+        active_source_names = {
+            str(source.get("name", "")).strip()
+            for source in request.sources
+            if str(source.get("name", "")).strip()
+        }
+        if not active_source_names:
+            return {
+                "answer": (
+                    "No documents are selected. Check at least one document on "
+                    "your desk before asking a question."
+                ),
+            }
+
         query_embedding = query_embedder.embed_query(question)
         chapter_number = _extract_chapter_number(question)
-        metadata_filter = (
-            {"chapter_number": chapter_number}
-            if chapter_number is not None
-            else None
-        )
+        metadata_filter = {"source_file": {"$in": sorted(active_source_names)}}
+        if chapter_number is not None:
+            metadata_filter = {
+                "$and": [
+                    metadata_filter,
+                    {"chapter_number": chapter_number},
+                ]
+            }
         context_chunks = vector_repository.similarity_search(
             query_embedding,
             top_k=settings.retrieval_top_k,

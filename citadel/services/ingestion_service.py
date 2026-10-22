@@ -108,6 +108,10 @@ class IngestionService:
         self._repo.delete_collection()
         logger.info("Vector store cleared.")
 
+    def delete_document(self, document_id: str) -> int:
+        """Delete one document and all of its stored chunks."""
+        return self._repo.delete_documents(document_id)
+
     @property
     def document_count(self) -> int:
         """Return the current number of stored documents."""

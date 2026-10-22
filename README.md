@@ -20,7 +20,7 @@ say so rather than inventing information.
 
 ## How it works
 
-1. The textbook is split into smaller pieces of text.
+1. The uploaded PDF, Markdown, and text documents are split into smaller pieces of text.
 2. The pieces are embedded locally with `all-MiniLM-L6-v2` and stored in Chroma.
 3. A student's question is used to retrieve the most relevant textbook passages.
 4. Groq generates an answer using those passages as context.
@@ -48,18 +48,22 @@ used only for answer generation. Keep the `.env` file private.
 
 ## Running the API
 
-Because the embedding provider changed, rebuild the old Gemini Chroma database
-once. This removes only the generated vector store, not the textbook:
-
-```powershell
-Remove-Item -Recurse -Force .\chroma_db -ErrorAction SilentlyContinue
-python ingest_data.py data\textbooks\pythonlearn.pdf
-```
-
-After ingestion completes, start the server:
+The application creates an empty Chroma database automatically on first
+startup. You can run the app before adding any documents:
 
 ```powershell
 python app.py
+```
+
+Then open `http://localhost:8000`, upload one or more PDF, Markdown, or text
+files, and wait for the upload to finish. The website automatically extracts,
+chunks, embeds, and stores each uploaded document.
+
+The command-line ingestion script is optional and is only needed when you want
+to pre-load files from `data\textbooks` before opening the website:
+
+```powershell
+python ingest_data.py data\textbooks\pythonlearn.pdf
 ```
 
 The API runs at `http://localhost:8000`. Ask a question by sending a `POST`
@@ -70,3 +74,7 @@ request to `/ask`:
   "question": "What is the main idea of chapter one?"
 }
 ```
+
+The web interface accepts multiple PDF, Markdown, or text files in one upload.
+Selected documents are used to filter retrieval, and each uploaded document can
+be removed independently from the vector store.

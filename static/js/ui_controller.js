@@ -80,6 +80,10 @@ const noteCountBadge = document.getElementById("noteCountBadge");
 const themeNameLabel = document.getElementById("themeNameLabel");
 const ambientWaveStage = document.getElementById("ambientWaveStage");
 const waveCanvas = document.getElementById("waveCanvas");
+const uploadProgressOverlay = document.getElementById("uploadProgressOverlay");
+const uploadProgressTitle = document.getElementById("uploadProgressTitle");
+const uploadProgressMessage = document.getElementById("uploadProgressMessage");
+const uploadProgressDetail = document.getElementById("uploadProgressDetail");
 
 function initStudyWorkspace() {
   renderSources();
@@ -197,7 +201,14 @@ function renderSources() {
         } />
         <span class="doc-title" title="${doc.name}">${doc.name}</span>
       </div>
-      <span class="doc-size">${doc.size}</span>
+      <div class="doc-card-actions">
+        <span class="doc-size">${doc.size}</span>
+        ${
+          doc.id
+            ? `<button class="doc-delete-btn" type="button" title="Remove document">×</button>`
+            : ""
+        }
+      </div>
     `;
 
     const checkbox = card.querySelector(".doc-checkbox");
@@ -205,6 +216,18 @@ function renderSources() {
       e.stopPropagation();
       doc.active = e.target.checked;
       renderSources();
+    });
+
+    const deleteButton = card.querySelector(".doc-delete-btn");
+    deleteButton?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      try {
+        await CitadelAPI.deleteDocument(doc.id);
+        state.sources.splice(index, 1);
+        renderSources();
+      } catch (error) {
+        console.warn("Could not delete document:", error.message);
+      }
     });
 
     card.addEventListener("click", (e) => {
@@ -341,11 +364,42 @@ async function sendUserMessage() {
 
 async function handleFileUploads(files) {
   if (!files || !files.length) return;
-  const result = await CitadelAPI.uploadDocuments(files);
-  if (result && result.sources) {
-    state.sources.push(...result.sources);
-    renderSources();
-    openPassageReader(state.sources.length - 1);
+  if (document.body.classList.contains("uploading-documents")) return;
+
+  const fileCount = files.length;
+  document.body.classList.add("uploading-documents");
+  uploadProgressOverlay.classList.remove("hidden");
+  uploadProgressTitle.textContent = fileCount === 1
+    ? "Adding your resource"
+    : `Adding ${fileCount} resources`;
+  uploadProgressMessage.textContent = "Reading your documents...";
+  uploadProgressDetail.textContent = `${fileCount} file${fileCount === 1 ? "" : "s"} selected`;
+
+  const stageTimer = window.setTimeout(() => {
+    uploadProgressMessage.textContent = "Creating searchable notes...";
+    uploadProgressDetail.textContent = "Splitting passages and building local embeddings";
+  }, 650);
+
+  try {
+    const result = await CitadelAPI.uploadDocuments(files);
+    if (result && result.sources) {
+      state.sources.push(...result.sources);
+      renderSources();
+      openPassageReader(state.sources.length - 1);
+      uploadProgressMessage.textContent = "Your resources are ready.";
+      uploadProgressDetail.textContent = "You can now ask questions about them.";
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+    }
+  } catch (error) {
+    uploadProgressMessage.textContent = "We couldn't add those resources.";
+    uploadProgressDetail.textContent = "Please check the files and try again.";
+    await new Promise((resolve) => window.setTimeout(resolve, 900));
+    console.warn("Document upload failed:", error.message);
+  } finally {
+    window.clearTimeout(stageTimer);
+    uploadProgressOverlay.classList.add("hidden");
+    document.body.classList.remove("uploading-documents");
+    fileInputEl.value = "";
   }
 }
 

@@ -12,6 +12,21 @@
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
+  <div class="upload-progress-overlay hidden" id="uploadProgressOverlay" role="status" aria-live="polite">
+    <div class="upload-progress-card">
+      <div class="upload-progress-icon" aria-hidden="true">
+        <span></span>
+      </div>
+      <p class="upload-progress-eyebrow">CITADEL IS READING</p>
+      <h2 id="uploadProgressTitle">Adding your resources</h2>
+      <p id="uploadProgressMessage">Preparing your documents...</p>
+      <div class="upload-progress-track" aria-hidden="true">
+        <div class="upload-progress-fill"></div>
+      </div>
+      <p class="upload-progress-detail" id="uploadProgressDetail"></p>
+    </div>
+  </div>
+
   <div class="study-layout">
     
     <!-- ================= LEFT BOOKSHELF (Documents & Past Pages) ================= -->
@@ -41,7 +56,7 @@
 
         <!-- Friendly Upload Card -->
         <div class="upload-card" id="dropzone">
-          <input type="file" id="fileInput" multiple accept=".pdf,.txt,.md,.docx" hidden />
+          <input type="file" id="fileInput" multiple accept=".pdf,.txt,.md" hidden />
           <div class="upload-icon-circle">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>

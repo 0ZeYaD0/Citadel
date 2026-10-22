@@ -69,3 +69,13 @@ def test_document_count_delegates_to_repo(service, mock_repo):
     """document_count property should delegate to the repo."""
     mock_repo.document_count.return_value = 42
     assert service.document_count == 42
+
+
+def test_delete_document_delegates_to_repo(service, mock_repo):
+    """Deleting one document should delegate its stable ID to the repository."""
+    mock_repo.delete_documents.return_value = 4
+
+    result = service.delete_document("document-123")
+
+    assert result == 4
+    mock_repo.delete_documents.assert_called_once_with("document-123")
