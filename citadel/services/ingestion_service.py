@@ -7,12 +7,11 @@ import time
 
 from langchain_core.documents import Document
 
+from citadel.core.config import Settings, get_settings
 from citadel.domain.interfaces import VectorRepository
 
 logger = logging.getLogger(__name__)
 
-_MAX_RATE_LIMIT_RETRIES = 8
-_MIN_RATE_LIMIT_WAIT_SECONDS = 60.0
 _RETRY_DELAY_PATTERN = re.compile(r"retry(?:ing)? in\s+([0-9]+(?:\.[0-9]+)?)s")
 
 
@@ -30,10 +29,16 @@ class IngestionService:
     def __init__(
         self,
         vector_repo: VectorRepository,
-        batch_size: int = 50,
+        settings: Settings | None = None,
+        batch_size: int | None = None,
     ) -> None:
         self._repo = vector_repo
-        self._batch_size = batch_size
+        runtime_settings = settings or get_settings()
+        self._batch_size = batch_size or runtime_settings.ingestion_batch_size
+        self._max_rate_limit_retries = runtime_settings.ingestion_max_retries
+        self._min_rate_limit_wait_seconds = (
+            runtime_settings.ingestion_min_retry_wait_seconds
+        )
 
     def ingest(self, documents: list[Document]) -> int:
         """Embed and store *documents* in batches.
@@ -64,20 +69,13 @@ class IngestionService:
         return total_stored
 
     def _store_batch_with_retry(self, batch: list[Document]) -> list[str]:
-        """Retry rate-limited batches across the provider quota window.
-
-        Gemini's free embedding quota is measured over a rolling minute. A
-        short fixed retry sequence can exhaust all retries before that window
-        resets, so the provider's suggested delay is honored and never reduced
-        below one minute for quota exhaustion.
-        """
-        for attempt in range(_MAX_RATE_LIMIT_RETRIES):
+        for attempt in range(self._max_rate_limit_retries):
             try:
                 return self._repo.add_documents(batch)
             except Exception as exc:
                 message = str(exc).upper()
                 is_rate_limited = "429" in message or "RESOURCE_EXHAUSTED" in message
-                if not is_rate_limited or attempt == _MAX_RATE_LIMIT_RETRIES - 1:
+                if not is_rate_limited or attempt == self._max_rate_limit_retries - 1:
                     raise
                 delay = self._retry_delay_seconds(str(exc), attempt)
                 logger.warning(
@@ -85,7 +83,7 @@ class IngestionService:
                     "seconds (attempt %d/%d).",
                     delay,
                     attempt + 1,
-                    _MAX_RATE_LIMIT_RETRIES - 1,
+                    self._max_rate_limit_retries - 1,
                 )
                 time.sleep(delay)
 
@@ -98,7 +96,7 @@ class IngestionService:
         provider_delay = float(match.group(1)) if match else 0.0
         exponential_delay = 2**attempt * 5.0
         return max(
-            _MIN_RATE_LIMIT_WAIT_SECONDS,
+            self._min_rate_limit_wait_seconds,
             provider_delay,
             exponential_delay,
         ) + random.uniform(0.0, 2.0)

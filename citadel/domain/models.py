@@ -5,29 +5,6 @@ from typing import Any, List, Optional
 
 
 @dataclass(frozen=True)
-class ChunkMetadata:
-    """Portable metadata describing the origin of a text chunk."""
-
-    source_file: str
-    page_number: Optional[int]
-    chunk_index: int
-    total_char_length: int
-
-
-@dataclass(frozen=True)
-class TextChunk:
-    """A piece of text extracted from a source document.
-
-    Attributes:
-        content:  The textual content of the chunk.
-        metadata: Arbitrary key-value metadata (source file, page number, etc.).
-    """
-
-    content: str
-    metadata: dict = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
 class DocumentChunk:
     """A retrieved chunk returned from a similarity search.
 
@@ -97,30 +74,6 @@ class DocumentRecord:
             "content": self.preview_text or "",
             "active": self.status == "ready",
         }
-
-
-@dataclass
-class SessionRecord:
-    """A study session (notebook) persisted in SQLite."""
-
-    id: str
-    title: str
-    emoji: str
-    created_at: str
-    updated_at: str
-
-
-@dataclass
-class NoteRecord:
-    """A pinned note persisted in SQLite."""
-
-    id: int
-    session_id: Optional[str]
-    document_id: Optional[str]
-    text: str
-    page_number: Optional[int]
-    tags: List[str]
-    created_at: str
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

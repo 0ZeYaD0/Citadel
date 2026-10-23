@@ -36,6 +36,7 @@ def test_retrieve_raises_on_empty_question():
         service.retrieve("   ")
 
 
+@pytest.mark.real_vector_store
 def test_chroma_similarity_search_real_db(tmp_path):
     """Integration test: verifies ChromaRepository stores vectors and returns top-k matches."""
     repo = ChromaRepository(persist_directory=str(tmp_path), collection_name="test_collection")

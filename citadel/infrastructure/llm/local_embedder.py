@@ -1,5 +1,7 @@
 """Local sentence-transformer embedding provider for Citadel."""
 
+import os
+
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from citadel.core.config import Settings, get_settings
@@ -13,9 +15,17 @@ class LocalEmbedder(EmbeddingProvider):
         """Initialize the local embedding model on CPU."""
         self._settings = settings or get_settings()
         self._model_name = self._settings.local_embedding_model
+        if self._settings.hf_home is not None:
+            os.environ.setdefault("HF_HOME", str(self._settings.hf_home))
+        if self._settings.hf_token:
+            os.environ.setdefault("HF_TOKEN", self._settings.hf_token)
+
+        model_kwargs = {"device": "cpu"}
+        if self._settings.hf_token:
+            model_kwargs["token"] = self._settings.hf_token
         self._embeddings = HuggingFaceEmbeddings(
             model_name=self._model_name,
-            model_kwargs={"device": "cpu"},
+            model_kwargs=model_kwargs,
             encode_kwargs={"normalize_embeddings": True},
         )
 

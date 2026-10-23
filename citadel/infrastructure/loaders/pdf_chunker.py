@@ -53,12 +53,12 @@ class TextbookDocumentProcessor(BaseDocumentProcessor):
         """Initialize the processor with validated splitter settings."""
         settings = get_settings()
         self._chunk_size = (
-            chunk_size if chunk_size is not None else settings.CHUNK_SIZE
+            chunk_size if chunk_size is not None else settings.chunk_size
         )
         self._chunk_overlap = (
             chunk_overlap
             if chunk_overlap is not None
-            else settings.CHUNK_OVERLAP
+            else settings.chunk_overlap
         )
         if self._chunk_size <= 0:
             raise ValueError("chunk_size must be greater than zero.")
