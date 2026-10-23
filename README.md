@@ -32,6 +32,8 @@ Create a `.env` file:
 
 ```env
 GROQ_API_KEY=your_groq_api_key_here
+HF_TOKEN=your_huggingface_read_token
+HF_HOME=.hf_cache
 GROQ_MODEL=qwen/qwen3-32b
 LOCAL_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 CHROMA_PERSIST_DIR=chroma_db
@@ -39,9 +41,23 @@ CHROMA_COLLECTION_NAME=citadel_local_minilm
 RETRIEVAL_TOP_K=5
 CHUNK_SIZE=1500
 CHUNK_OVERLAP=200
+STUDY_PROMPTS_PATH=prompts/study_tools.txt
+LOAD_PIPELINE_IN_BACKGROUND=true
 ```
 
 > **Note**: `GEMINI_API_KEY` is not required unless you switch to `gemini_generator.py`. The default stack uses Groq + local embeddings only.
+
+`HF_TOKEN` is an optional read token for faster, higher-limit Hugging Face
+model downloads. The model is cached locally in `HF_HOME`. With
+`LOAD_PIPELINE_IN_BACKGROUND=true`, the server accepts connections while the
+embedding model initializes; use `/health` to wait for `"status": "ok"`.
+
+### Custom study prompts
+
+Study-tool instructions are editable in `prompts/study_tools.txt`. Keep one
+section per tool, such as `[flashcards]` or `[quiz]`. The `{count}` placeholder
+is replaced with the requested item count, and changes are loaded on the next
+study-tool request. Set `STUDY_PROMPTS_PATH` to use a different prompt file.
 
 ## Running
 

@@ -20,10 +20,10 @@ class RAGService:
         if top_k <= 0:
             raise ValueError("top_k must be a positive integer.")
 
-        # 1. Embed the user's question
+
         query_vector = self.embedder.embed_query(cleaned_question)
 
-        # 2. Fetch the top-k chunks from ChromaDB
+
         top_chunks = self.vector_repo.similarity_search(
             query_embedding=query_vector,
             top_k=top_k

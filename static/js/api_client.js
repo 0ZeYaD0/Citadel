@@ -5,8 +5,7 @@
 
 const CitadelAPI = {
   baseUrl: "", // Same origin when served by app.py
-
-  // ─── Documents ──────────────────────────────────────────────────────────
+  _activePolls: new Map(),
 
   /** Upload files; returns { job_id, document_ids, rejected } immediately. */
   async uploadDocuments(files) {
@@ -27,9 +26,18 @@ const CitadelAPI = {
   },
 
   /** Poll a background job until it reaches done/error. Calls onProgress(job) each tick. */
-  async pollJob(jobId, onProgress, intervalMs = 800, maxWaitMs = 300_000) {
+  async pollJob(
+    jobId,
+    onProgress,
+    intervalMs = window.CitadelRuntimeConfig.jobPollIntervalMs,
+    maxWaitMs = window.CitadelRuntimeConfig.jobPollTimeoutMs
+  ) {
+    if (this._activePolls.has(jobId)) {
+      return this._activePolls.get(jobId);
+    }
     const deadline = Date.now() + maxWaitMs;
-    return new Promise((resolve, reject) => {
+    const pollPromise = new Promise((resolve, reject) => {
+      let delay = intervalMs;
       const tick = async () => {
         try {
           const job = await this.getJob(jobId);
@@ -42,13 +50,23 @@ const CitadelAPI = {
             reject(new Error("Upload timed out waiting for processing."));
             return;
           }
-          setTimeout(tick, intervalMs);
+          setTimeout(tick, delay);
+          delay = Math.min(
+            delay * 1.5,
+            window.CitadelRuntimeConfig.jobPollMaxIntervalMs
+          );
         } catch (err) {
           reject(err);
         }
       };
       tick();
     });
+    this._activePolls.set(jobId, pollPromise);
+    pollPromise.then(
+      () => this._activePolls.delete(jobId),
+      () => this._activePolls.delete(jobId)
+    );
+    return pollPromise;
   },
 
   /** Fetch one job's status. */
@@ -88,8 +106,6 @@ const CitadelAPI = {
     return await response.json();
   },
 
-  // ─── Query ──────────────────────────────────────────────────────────────
-
   /** Send a RAG query; returns { answer, citations, evidence_found, … }. */
   async queryKnowledgeBase(query, activeSources, minSimilarity = null) {
     try {
@@ -121,10 +137,13 @@ const CitadelAPI = {
     }
   },
 
-  // ─── Study Tools ─────────────────────────────────────────────────────────
-
   /** Generate flashcards / quiz / summary / key_terms / explain_simple. */
-  async runStudyTool(tool, documentIds = [], chapter = null, count = 5) {
+  async runStudyTool(
+    tool,
+    documentIds = [],
+    chapter = null,
+    count = window.CitadelRuntimeConfig.defaultStudyToolCount
+  ) {
     const body = { tool, document_ids: documentIds, count };
     if (chapter !== null) body.chapter = chapter;
 
@@ -139,8 +158,6 @@ const CitadelAPI = {
     }
     return await response.json();
   },
-
-  // ─── Sessions ────────────────────────────────────────────────────────────
 
   /** Fetch all persisted sessions. */
   async getSessions() {

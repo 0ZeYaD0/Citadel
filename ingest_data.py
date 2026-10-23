@@ -56,13 +56,11 @@ def _add_chapter_metadata(pages: list[Document]) -> list[Document]:
 
 
 def main(pdf_path: str, reset: bool = False) -> None:
-    # 1. Load the PDF into LangChain Documents (one per page)
     logger.info("Loading PDF: %s", pdf_path)
     loader = PyPDFLoader(pdf_path)
     pages = loader.load()
     logger.info("Loaded %d pages.", len(pages))
 
-    # 2. Split pages into smaller chunks
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=settings.chunk_size,
         chunk_overlap=settings.chunk_overlap,
@@ -70,7 +68,6 @@ def main(pdf_path: str, reset: bool = False) -> None:
     chunks = splitter.split_documents(_add_chapter_metadata(pages))
     logger.info("Split into %d chunks.", len(chunks))
 
-    # 3. Embed and store via the clean-architecture service
     repo = ChromaRepository()
     service = IngestionService(vector_repo=repo)
     if reset:

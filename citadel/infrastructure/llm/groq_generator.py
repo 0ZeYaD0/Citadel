@@ -28,19 +28,13 @@ REFUSAL_MESSAGE = (
     "I cannot find the answer to this question in the provided textbook material."
 )
 
-# Minimum cosine-similarity score a chunk must have to be included in context.
-# Chunks below this threshold are considered too dissimilar to be useful and
-# are filtered out before generation to reduce hallucination risk.
-DEFAULT_MIN_SIMILARITY = 0.25
-
-
 class GroqAnswerGenerator(BaseAnswerGenerator):
     """Generate low-temperature, textbook-grounded answers with Groq."""
 
     def __init__(
         self,
         settings: Settings | None = None,
-        min_similarity: float = DEFAULT_MIN_SIMILARITY,
+        min_similarity: float | None = None,
     ) -> None:
         """Initialize Groq and the grounded LCEL generation chain.
 
@@ -52,13 +46,17 @@ class GroqAnswerGenerator(BaseAnswerGenerator):
         """
         self._settings = settings or get_settings()
         self._model_name = self._settings.groq_model
-        self._min_similarity = min_similarity
+        self._min_similarity = (
+            self._settings.min_similarity
+            if min_similarity is None
+            else min_similarity
+        )
         self._llm = ChatGroq(
             model=self._model_name,
             temperature=self._settings.llm_temperature,
             max_tokens=self._settings.llm_max_output_tokens,
             api_key=self._settings.groq_api_key,
-            max_retries=2,
+            max_retries=self._settings.llm_max_retries,
         )
         self._chain = self._build_chain()
 
@@ -73,6 +71,10 @@ class GroqAnswerGenerator(BaseAnswerGenerator):
 Use ONLY the passages inside <textbook_context> to answer the student's question. Do not use prior general knowledge, assumptions, or external facts.
 
 Whenever you state a fact from a passage, cite it inline using [Source: filename, Page: number]. If the page is unavailable, use [Source: filename, Page: N/A].
+
+For broad requests such as summaries, overviews, main ideas, key takeaways, or
+simple explanations of the selected documents, use the supplied passages
+directly, even when they represent only part of the documents.
 
 If the passages do not contain enough information, reply exactly: "{refusal_message}"
 Do not guess or fabricate an answer.
@@ -103,7 +105,6 @@ You may summarize chapters, explain concepts simply, compare ideas, or create re
         if not question:
             raise EmptyQuestionError("Question cannot be empty.")
 
-        # Apply similarity threshold filter
         filtered_chunks = self._filter_by_similarity(context_chunks)
         raw_count = len(context_chunks)
         filtered_count = len(filtered_chunks)
@@ -171,12 +172,26 @@ You may summarize chapters, explain concepts simply, compare ideas, or create re
     def _filter_by_similarity(
         self, chunks: List[DocumentChunk]
     ) -> List[DocumentChunk]:
-        """Remove chunks whose similarity score falls below the threshold."""
+        """Filter weak matches while preserving context for broad questions."""
+        if not chunks:
+            return []
+
         result = []
         for chunk in chunks:
-            # If no score available (e.g. from older ingestion), keep the chunk
             if chunk.score is None or chunk.score >= self._min_similarity:
                 result.append(chunk)
+
+        if not result and any(chunk.score is not None for chunk in chunks):
+            logger.warning(
+                "All %d chunks scored below %.2f; retaining top context.",
+                len(chunks),
+                self._min_similarity,
+            )
+            return sorted(
+                chunks,
+                key=lambda chunk: chunk.score if chunk.score is not None else float("-inf"),
+                reverse=True,
+            )[:3]
         return result
 
     @staticmethod

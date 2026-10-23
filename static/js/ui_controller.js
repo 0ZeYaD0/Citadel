@@ -212,14 +212,23 @@ async function createNewNotebookAndOpen(customTitle = "Untitled Notebook", emoji
   try {
     const res = await CitadelAPI.upsertSession(null, customTitle, emoji);
     sid = res.session_id;
-  } catch {
-    sid = `nb-${Date.now()}`;
+  } catch (err) {
+    console.error("Could not create notebook:", err);
+    throw err;
   }
 
   const newSession = { id: sid, title: customTitle, emoji, date: today, messages: [] };
   state.sessions.unshift(newSession);
   state.messages[sid] = [];
-  openWorkspaceWithSession(sid);
+  await openWorkspaceWithSession(sid);
+}
+
+async function renameCurrentNotebook() {
+  if (!state.currentSessionId) return;
+  const session = state.sessions.find((item) => item.id === state.currentSessionId);
+  if (!session) return;
+
+  beginSessionRename(session, currentSessionTitle);
 }
 
 function returnToHub() {
@@ -281,7 +290,7 @@ function renderHub(searchFilter = "") {
           <button class="delete-notebook-btn" data-del="${sess.id}" title="Delete notebook">✕</button>
         </div>
         <div class="recent-card-bottom">
-          <h4>${sess.title}</h4>
+          <h4 class="session-name" title="Click to rename">${sess.title}</h4>
           <span class="recent-card-meta">${sess.date} • ${state.sources.length} source${state.sources.length === 1 ? "" : "s"}</span>
         </div>
       </div>`
@@ -300,6 +309,15 @@ function renderHub(searchFilter = "") {
         openWorkspaceWithSession(card.dataset.id);
       });
     });
+    recentGrid.querySelectorAll(".session-name").forEach((name) => {
+      name.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const session = state.sessions.find(
+          (item) => item.id === name.closest(".recent-card")?.dataset.id
+        );
+        if (session) beginSessionRename(session, name);
+      });
+    });
 
     recentGrid.querySelectorAll(".delete-notebook-btn").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
@@ -313,6 +331,56 @@ function renderHub(searchFilter = "") {
       });
     });
   }
+
+}
+
+function beginSessionRename(session, target) {
+  if (!target || target.parentElement?.querySelector(".session-name-input")) return;
+
+  const input = document.createElement("input");
+  input.className = "session-name-input";
+  input.type = "text";
+  input.value = session.title;
+  input.maxLength = 120;
+  if (target.id === "currentSessionTitle") {
+    target.hidden = true;
+    target.parentElement.appendChild(input);
+  } else {
+    target.replaceWith(input);
+  }
+  input.focus();
+  input.select();
+
+  let finished = false;
+  const finish = async (save) => {
+    if (finished) return;
+    finished = true;
+    const nextTitle = input.value.trim();
+    if (save && nextTitle && nextTitle !== session.title) {
+      try {
+        await CitadelAPI.upsertSession(session.id, nextTitle, session.emoji);
+        session.title = nextTitle;
+      } catch (error) {
+        console.error("Could not rename notebook:", error);
+      }
+    }
+    if (target.id === "currentSessionTitle") {
+      target.textContent = session.title;
+      target.hidden = false;
+      input.remove();
+    }
+    renderHub();
+    renderHistory();
+    if (session.id === state.currentSessionId && currentSessionTitle) {
+      currentSessionTitle.textContent = session.title;
+    }
+  };
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") finish(true);
+    if (event.key === "Escape") finish(false);
+  });
+  input.addEventListener("blur", () => finish(true));
 }
 
 // ─── Render: Silk wave ───────────────────────────────────────────────────────
@@ -492,7 +560,15 @@ function renderHistory() {
   state.sessions.forEach((sess) => {
     const item = document.createElement("div");
     item.className = `page-item ${sess.id === state.currentSessionId ? "active" : ""}`;
-    item.textContent = sess.title;
+    const title = document.createElement("span");
+    title.className = "session-name";
+    title.title = "Click to rename";
+    title.textContent = sess.title;
+    item.appendChild(title);
+    title.addEventListener("click", (event) => {
+      event.stopPropagation();
+      beginSessionRename(sess, title);
+    });
     item.addEventListener("click", async () => {
       state.currentSessionId = sess.id;
       if (currentSessionTitle) currentSessionTitle.textContent = sess.title;
@@ -547,7 +623,7 @@ function renderChat() {
 
       const saveBtn = card.querySelector(".bookmark-btn");
       saveBtn.addEventListener("click", async () => {
-        const noteText = msg.text.replace(/\[Source \d+\]/g, "").trim();
+        const noteText = msg.text.trim();
         try {
           const res = await CitadelAPI.saveNote(noteText, state.currentSessionId);
           state.pinnedNotes.unshift({ id: res.note_id, text: noteText, session_id: state.currentSessionId });
@@ -559,12 +635,6 @@ function renderChat() {
         }
       });
 
-      card.querySelectorAll(".citation-tag").forEach((tag) => {
-        tag.addEventListener("click", () => {
-          const idx = parseInt(tag.dataset.index, 10) - 1;
-          openPassageReader(idx);
-        });
-      });
     }
 
     chatFeedEl.appendChild(card);
@@ -612,11 +682,7 @@ function formatFriendlyText(text) {
   return (text || "")
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/`(.*?)`/g, "<code>$1</code>")
-    .replace(/\n/g, "<br>")
-    .replace(
-      /\[Source (\d+)\]/g,
-      `<span class="citation-tag" data-index="$1">Ref $1</span>`
-    );
+    .replace(/\n/g, "<br>");
 }
 
 // ─── Passage reader ───────────────────────────────────────────────────────────
@@ -625,6 +691,7 @@ function openPassageReader(docIndex) {
   const doc = state.sources[docIndex];
   if (!doc || !inspectorDrawer || !inspectorContent) return;
   inspectorDrawer.classList.remove("closed");
+  workspaceView?.classList.remove("drawer-closed");
   _activateReaderTab("inspector");
 
   const statusBadge =
@@ -710,6 +777,7 @@ async function sendUserMessage() {
       text: res?.answer || "No response received from the model.",
       evidence_found: res?.evidence_found,
       latency_ms: res?.latency_ms,
+      citations: res?.citations || [],
     };
   } catch (err) {
     aiMsg = { role: "ai", text: `⚠️ Error: ${err.message}` };
@@ -784,7 +852,7 @@ async function handleFileUploads(files) {
     );
 
     // Step 3: refresh document list from registry
-    const docs = await CitadelAPI.getDocuments();
+    const docs = await CitadelAPI.getDocuments(state.currentSessionId);
     state.sources = docs.map((d) => ({
       id: d.id,
       name: d.filename || d.name,
@@ -797,6 +865,19 @@ async function handleFileUploads(files) {
     }));
 
     renderSources();
+    const session = state.sessions.find((item) => item.id === state.currentSessionId);
+    if (
+      session &&
+      session.title === "Untitled Notebook" &&
+      docs.length > 0
+    ) {
+      const firstName = docs[0].filename || docs[0].name || "Notebook";
+      const generatedTitle = firstName.replace(/\.[^.]+$/, "").trim() || "Notebook";
+      await CitadelAPI.upsertSession(session.id, generatedTitle, session.emoji);
+      session.title = generatedTitle;
+      if (currentSessionTitle) currentSessionTitle.textContent = generatedTitle;
+      renderHistory();
+    }
     if (state.sources.length > 0) {
       openPassageReader(state.sources.length - 1);
     }
@@ -939,6 +1020,7 @@ function setupEvents() {
 
   // New chat
   document.getElementById("newChatBtn")?.addEventListener("click", () => createNewNotebookAndOpen());
+  currentSessionTitle?.addEventListener("click", renameCurrentNotebook);
 
   // Sidebar / drawer toggles
   document.getElementById("sidebarToggleBtn")?.addEventListener("click", () => {
@@ -947,10 +1029,12 @@ function setupEvents() {
     workspaceView?.classList.toggle("sidebar-collapsed", sidebar?.classList.contains("collapsed"));
   });
   document.getElementById("drawerToggleBtn")?.addEventListener("click", () => {
-    inspectorDrawer?.classList.toggle("closed");
+    const isClosed = inspectorDrawer?.classList.toggle("closed") ?? true;
+    workspaceView?.classList.toggle("drawer-closed", isClosed);
   });
   document.getElementById("closeDrawerBtn")?.addEventListener("click", () => {
     inspectorDrawer?.classList.add("closed");
+    workspaceView?.classList.add("drawer-closed");
   });
 
   // Reader tabs
@@ -991,8 +1075,10 @@ function _syncResponsivePanels() {
 
   if (window.innerWidth <= 1280) {
     inspectorDrawer.classList.add("closed");
+    workspaceView.classList.add("drawer-closed");
   } else {
     inspectorDrawer.classList.remove("closed");
+    workspaceView.classList.remove("drawer-closed");
   }
 }
 

@@ -12,10 +12,13 @@ import json
 import logging
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Generator
+
+from citadel.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +83,12 @@ CREATE TABLE IF NOT EXISTS jobs (
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id, id);
+CREATE INDEX IF NOT EXISTS idx_notes_session_id ON notes(session_id, id);
+CREATE INDEX IF NOT EXISTS idx_session_documents_document_id
+    ON session_documents(document_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_updated_at ON jobs(updated_at);
 """
 
 
@@ -92,9 +101,12 @@ class SQLiteRepository:
         File path for the SQLite database.  Will be created on first use.
     """
 
-    def __init__(self, db_path: str | Path = "citadel.db") -> None:
-        self._db_path = str(db_path)
+    def __init__(self, db_path: str | Path | None = None) -> None:
+        self._db_path = str(db_path or get_settings().database_path)
+        self._settings = get_settings()
         self._local = threading.local()
+        self._connections: set[sqlite3.Connection] = set()
+        self._connections_lock = threading.Lock()
         self._init_db()
         logger.info("SQLiteRepository initialised at %s", self._db_path)
 
@@ -103,10 +115,19 @@ class SQLiteRepository:
     def _get_conn(self) -> sqlite3.Connection:
         """Return a per-thread connection, creating one if needed."""
         if not hasattr(self._local, "conn") or self._local.conn is None:
-            conn = sqlite3.connect(self._db_path, check_same_thread=False)
+            conn = sqlite3.connect(
+                self._db_path,
+                check_same_thread=False,
+                timeout=self._settings.sqlite_busy_timeout_ms / 1000,
+            )
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute(
+                f"PRAGMA busy_timeout = {self._settings.sqlite_busy_timeout_ms}"
+            )
             self._local.conn = conn
+            with self._connections_lock:
+                self._connections.add(conn)
         return self._local.conn
 
     @contextmanager
@@ -115,7 +136,7 @@ class SQLiteRepository:
         cur = conn.cursor()
         try:
             yield cur
-            conn.commit()
+            self._commit_with_retry(conn)
         except Exception:
             conn.rollback()
             raise
@@ -126,7 +147,26 @@ class SQLiteRepository:
         """Create tables if they do not already exist."""
         conn = self._get_conn()
         conn.executescript(_DDL)
-        conn.commit()
+        self._commit_with_retry(conn)
+
+    def _commit_with_retry(self, conn: sqlite3.Connection) -> None:
+        for attempt in range(self._settings.sqlite_lock_retries + 1):
+            try:
+                conn.commit()
+                return
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt >= self._settings.sqlite_lock_retries:
+                    raise
+                time.sleep(self._settings.sqlite_retry_delay_seconds * (attempt + 1))
+
+    def close(self) -> None:
+        """Close all connections opened by this repository."""
+        with self._connections_lock:
+            connections = tuple(self._connections)
+            self._connections.clear()
+        for conn in connections:
+            conn.close()
+        self._local.conn = None
 
 
     @staticmethod

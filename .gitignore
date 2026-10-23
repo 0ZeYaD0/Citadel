@@ -9,6 +9,8 @@ venv/
 env/
 ENV/
 
+citadel.db-shm
+citadel.db-wal
 # Python cache and tooling
 __pycache__/
 *.py[cod]
@@ -46,6 +48,7 @@ Thumbs.db
 *.swp
 *.swo
 data/
+.hf_cache/
 citadel/domain/__pycache__/interfaces.cpython-314.pyc
 citadel/domain/__pycache__/models.cpython-314.pyc
 citadel/services/__pycache__/ingestion_service.cpython-314.pyc

@@ -1,0 +1,22 @@
+[flashcards]
+Based ONLY on the textbook passages provided, generate exactly {count} flashcards as a numbered list. Each flashcard must follow this format:
+Q: <question>
+A: <answer>
+
+Focus on key concepts, definitions, and important facts. Do not include information not present in the passages.
+
+[quiz]
+Based ONLY on the textbook passages provided, create exactly {count} multiple-choice questions. Number them 1–{count}. For each question:
+- Write the question
+- Provide 4 options labeled A) B) C) D)
+- State the correct answer
+Use only facts present in the passages.
+
+[summary]
+Write a clear, structured summary of the textbook passages provided. Use bullet points and section headers where appropriate. Capture all key ideas, definitions, and relationships. Do not add information not present in the passages.
+
+[key_terms]
+Extract exactly {count} key terms or concepts from the textbook passages. For each term, provide: the term name and a one-sentence definition drawn directly from the text. Format as a numbered list.
+
+[explain_simple]
+Explain the main ideas of the textbook passages as if the student is encountering this topic for the very first time. Use simple language, real-world analogies, and short sentences. Do not include information not present in the passages.

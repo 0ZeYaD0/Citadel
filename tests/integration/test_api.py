@@ -84,16 +84,16 @@ def _patch_pipeline(tmp_path, monkeypatch):
     from citadel.infrastructure.database.sqlite_repository import SQLiteRepository
     test_db = SQLiteRepository(db_path=tmp_path / "test_citadel.db")
 
-    monkeypatch.setattr(_app, "query_embedder", mock_embedder)
-    monkeypatch.setattr(_app, "vector_repository", mock_repo)
-    monkeypatch.setattr(_app, "answer_generator", mock_generator)
-    monkeypatch.setattr(_app, "ingestion_service", MagicMock(
+    _app.services.query_embedder = mock_embedder
+    _app.services.vector_repository = mock_repo
+    _app.services.answer_generator = mock_generator
+    _app.services.ingestion_service = MagicMock(
         ingest=MagicMock(return_value=1),
         clear_store=MagicMock(),
         delete_document=MagicMock(return_value=1),
-    ))
-    monkeypatch.setattr(_app, "document_processor", mock_processor)
-    monkeypatch.setattr(_app, "db", test_db)
+    )
+    _app.services.document_processor = mock_processor
+    _app.services.db = test_db
     monkeypatch.setattr(_app, "load_rag_pipeline", MagicMock())
 
 
@@ -178,7 +178,7 @@ class TestUpload:
         # Force document to 'ready' state in DB
         import app as _app
         doc_id = res1.json()["document_ids"][0]
-        _app.db.update_document_status(doc_id, status="ready", chunk_count=1)
+        _app.services.db.update_document_status(doc_id, status="ready", chunk_count=1)
 
         # Second upload (same name + content = same hash)
         res2 = self._upload(client, "dup.txt", b"same content")
@@ -193,8 +193,8 @@ class TestJobs:
         import app as _app
         import uuid
         job_id = str(uuid.uuid4())
-        _app.db.create_job(job_id)
-        _app.db.update_job(job_id, status="done", stage="complete", detail="done")
+        _app.services.db.create_job(job_id)
+        _app.services.db.update_job(job_id, status="done", stage="complete", detail="done")
         res = client.get(f"/api/jobs/{job_id}")
         assert res.status_code == 200
         data = res.json()
@@ -209,6 +209,37 @@ class TestJobs:
 # ─── Document registry ────────────────────────────────────────────────────────
 
 class TestDocuments:
+    def test_documents_are_scoped_to_session(self, client):
+        import app as _app
+
+        _app.services.db.upsert_session(
+            session_id="session-a", title="A", emoji="📓"
+        )
+        _app.services.db.upsert_session(
+            session_id="session-b", title="B", emoji="📓"
+        )
+        _app.services.db.upsert_document(
+            doc_id="doc-a",
+            filename="a.pdf",
+            file_type="PDF",
+            file_size_bytes=10,
+            status="ready",
+        )
+        _app.services.db.upsert_document(
+            doc_id="doc-b",
+            filename="b.pdf",
+            file_type="PDF",
+            file_size_bytes=10,
+            status="ready",
+        )
+        _app.services.db.link_document_to_session("session-a", "doc-a")
+        _app.services.db.link_document_to_session("session-b", "doc-b")
+
+        response = client.get("/api/documents?session_id=session-a")
+
+        assert response.status_code == 200
+        assert [doc["id"] for doc in response.json()["documents"]] == ["doc-a"]
+
     def test_list_documents_empty(self, client):
         res = client.get("/api/documents")
         assert res.status_code == 200
@@ -216,7 +247,7 @@ class TestDocuments:
 
     def test_list_documents_after_upsert(self, client):
         import app as _app
-        _app.db.upsert_document(
+        _app.services.db.upsert_document(
             doc_id="doc-abc",
             filename="test.pdf",
             file_type="PDF",
@@ -233,7 +264,7 @@ class TestDocuments:
 
     def test_delete_one_document(self, client):
         import app as _app
-        _app.db.upsert_document(
+        _app.services.db.upsert_document(
             doc_id="del-doc",
             filename="delete_me.pdf",
             file_type="PDF",
@@ -251,7 +282,7 @@ class TestDocuments:
     def test_delete_all_documents(self, client):
         import app as _app
         for i in range(3):
-            _app.db.upsert_document(
+            _app.services.db.upsert_document(
                 doc_id=f"doc-{i}",
                 filename=f"file{i}.pdf",
                 file_type="PDF",
@@ -278,7 +309,7 @@ class TestQuery:
         import app as _app
         # Make similarity_search return a chunk
         from citadel.domain.models import DocumentChunk
-        _app.vector_repository.similarity_search.return_value = [
+        _app.services.vector_repository.similarity_search.return_value = [
             DocumentChunk(
                 id="c1",
                 content="Photosynthesis converts light to energy.",
@@ -295,6 +326,30 @@ class TestQuery:
         assert "answer" in data
         assert data["evidence_found"] is True
 
+    def test_document_id_can_scope_query_when_name_is_missing(self, client):
+        import app as _app
+        from citadel.domain.models import DocumentChunk
+
+        _app.services.vector_repository.similarity_search.return_value = [
+            DocumentChunk(
+                id="id-filtered",
+                content="Document ID filtering works.",
+                metadata={"document_id": "doc-123", "page_number": 1},
+                score=0.9,
+            )
+        ]
+
+        res = client.post(
+            "/api/query",
+            json={"query": "Explain this document.", "sources": [{"id": "doc-123"}]},
+        )
+
+        assert res.status_code == 200
+        call = _app.services.vector_repository.similarity_search.call_args
+        assert call.kwargs["metadata_filter"] == {
+            "document_id": {"$in": ["doc-123"]}
+        }
+
     def test_empty_query_returns_400(self, client):
         res = client.post(
             "/api/query",
@@ -305,7 +360,7 @@ class TestQuery:
     def test_citation_filename_is_correct(self, client):
         import app as _app
         from citadel.domain.models import DocumentChunk, RAGResponse, SourceCitation
-        _app.vector_repository.similarity_search.return_value = [
+        _app.services.vector_repository.similarity_search.return_value = [
             DocumentChunk(
                 id="c2",
                 content="Some content",
@@ -313,7 +368,7 @@ class TestQuery:
                 score=0.9,
             )
         ]
-        _app.answer_generator.generate_grounded_answer.return_value = RAGResponse(
+        _app.services.answer_generator.generate_grounded_answer.return_value = RAGResponse(
             question="q",
             answer="Answer text",
             citations=[
@@ -454,7 +509,7 @@ class TestStudyTools:
     def _setup_docs(self, app_module):
         """Insert a ready document and mock a search result."""
         from citadel.domain.models import DocumentChunk
-        app_module.db.upsert_document(
+        app_module.services.db.upsert_document(
             doc_id="study-doc",
             filename="textbook.pdf",
             file_type="PDF",
@@ -462,7 +517,7 @@ class TestStudyTools:
             status="ready",
             chunk_count=10,
         )
-        app_module.vector_repository.similarity_search.return_value = [
+        app_module.services.vector_repository.similarity_search.return_value = [
             DocumentChunk(
                 id="sc1",
                 content="Key concept: machine learning is a subset of AI.",
@@ -474,14 +529,14 @@ class TestStudyTools:
     def test_flashcards_tool(self, client):
         import app as _app
         self._setup_docs(_app)
-        _app.answer_generator._llm.invoke = MagicMock()
+        _app.services.answer_generator._llm.invoke = MagicMock()
 
         from langchain_core.output_parsers import StrOutputParser
         # Patch chain invoke response
-        with patch("app.StrOutputParser") as mock_parser:
+        with patch("citadel.api.routes.StrOutputParser") as mock_parser:
             mock_chain = MagicMock()
             mock_chain.invoke.return_value = "Q: What is ML?\nA: A subset of AI."
-            _app.answer_generator._llm.__or__ = MagicMock(return_value=mock_chain)
+            _app.services.answer_generator._llm.__or__ = MagicMock(return_value=mock_chain)
 
             res = client.post(
                 "/api/study-tools",

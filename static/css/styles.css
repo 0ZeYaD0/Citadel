@@ -19,6 +19,7 @@
   --border-line: #D5E5D9;
   --shadow-paper: 0 2px 6px rgba(20, 36, 27, 0.04), 0 10px 24px rgba(20, 36, 27, 0.04);
   --shadow-floating: 0 14px 34px -6px rgba(20, 36, 27, 0.09), 0 2px 8px rgba(20, 36, 27, 0.04);
+  cursor: pointer;
 }
 
 /* 2. CORAL LEMONADE (Light — #FF1D58, #F75990, #FFF685) */
@@ -581,6 +582,14 @@ body {
   grid-template-columns: 0 minmax(0, 1fr) var(--reader-width);
 }
 
+.study-layout.drawer-closed {
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) 0;
+}
+
+.study-layout.sidebar-collapsed.drawer-closed {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+}
+
 .bookshelf-header {
   padding: 18px 18px 14px;
   display: flex;
@@ -598,14 +607,8 @@ body {
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: var(--accent-gradient);
-  color: #FFF;
-  font-family: 'Newsreader', serif;
-  font-size: 1.25rem;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  object-fit: cover;
+  display: block;
   box-shadow: 0 3px 10px var(--accent-soft);
 }
 
@@ -966,9 +969,29 @@ body {
   font-size: 1.15rem;
   font-weight: 500;
   color: var(--text-ink);
+  cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.session-name {
+  cursor: text;
+}
+
+.session-name-input {
+  min-width: 0;
+  max-width: 240px;
+  border: 1px solid var(--accent-primary);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-ink);
+  padding: 4px 7px;
+  font: inherit;
+}
+
+.recent-card .session-name-input {
+  width: 100%;
 }
 
 .desk-status {
@@ -1119,24 +1142,6 @@ body {
 .bookmark-btn:hover {
   color: var(--accent-badge-text);
   border-color: var(--accent-primary);
-}
-
-.citation-tag {
-  font-size: 0.74rem;
-  font-weight: 600;
-  background-color: var(--accent-soft);
-  color: var(--accent-badge-text);
-  padding: 2px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  margin: 0 2px;
-  display: inline-block;
-  transition: all 0.15s ease;
-}
-
-.citation-tag:hover {
-  background: var(--accent-gradient);
-  color: #FFF;
 }
 
 /* ================= CENTERPIECE WRITING BOX ================= */
@@ -1329,6 +1334,7 @@ body {
 }
 
 .side-reader.closed {
+  width: 0;
   transform: translateX(100%);
   opacity: 0;
   pointer-events: none;
@@ -1582,13 +1588,6 @@ body {
   background: rgba(255, 29, 88, 0.15);
   color: #f87171;
   border-color: rgba(248, 113, 113, 0.25);
-}
-
-/* ── Study tools section ── */
-.study-tools-section {
-  border-top: 1px solid var(--border-line);
-  padding-top: 10px;
-  margin-top: 4px;
 }
 
 .study-tools-grid {
