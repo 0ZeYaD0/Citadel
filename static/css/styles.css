@@ -481,7 +481,11 @@ body {
    VIEW 2: STUDY WORKSPACE
    ========================================================================== */
 .study-layout {
-  display: flex;
+  --sidebar-width: 288px;
+  --reader-width: 340px;
+  --conversation-max: 980px;
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--reader-width);
   height: 100vh;
   width: 100vw;
   overflow: hidden;
@@ -554,7 +558,7 @@ body {
 
 /* ================= LEFT BOOKSHELF (SIDEBAR) ================= */
 .bookshelf {
-  width: 288px;
+  width: var(--sidebar-width);
   background-color: var(--bg-shelf);
   border-right: 1px solid var(--border-line);
   display: flex;
@@ -566,7 +570,15 @@ body {
 }
 
 .bookshelf.collapsed {
-  margin-left: -288px;
+  width: 0;
+  min-width: 0;
+  border-right: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.study-layout.sidebar-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr) var(--reader-width);
 }
 
 .bookshelf-header {
@@ -914,13 +926,21 @@ body {
 
 /* ================= MAIN WRITING DESK ================= */
 .writing-desk {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
   background: var(--bg-desk-gradient);
+}
+
+.desk-content {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  flex: 1;
 }
 
 .desk-header {
@@ -997,10 +1017,10 @@ body {
   width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 36px 28px 250px 28px;
+  padding: 28px 32px 20px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 24px;
 }
 
@@ -1008,7 +1028,8 @@ body {
   text-align: center;
   padding: 18px 12px 8px;
   width: 100%;
-  max-width: 780px;
+  max-width: var(--conversation-max);
+  margin: 0 auto;
 }
 
 .welcome-banner h2 {
@@ -1041,9 +1062,9 @@ body {
 /* Centers user bubble within the 780px reading column while aligning it to the right of that column */
 .entry-card.user {
   width: fit-content;
-  max-width: min(78%, 600px);
+  max-width: min(76%, 700px);
   margin-left: auto;
-  margin-right: max(0px, calc((100% - 780px) / 2));
+  margin-right: max(0px, calc((100% - var(--conversation-max)) / 2));
   background: var(--accent-gradient);
   color: #FFFFFF;
   padding: 13px 18px;
@@ -1054,7 +1075,8 @@ body {
 
 .entry-card.ai {
   width: 100%;
-  max-width: 780px;
+  max-width: var(--conversation-max);
+  margin: 0 auto;
   background-color: var(--bg-card);
   backdrop-filter: blur(16px);
   border: 1px solid var(--border-line);
@@ -1119,12 +1141,14 @@ body {
 
 /* ================= CENTERPIECE WRITING BOX ================= */
 .composer-container {
-  position: absolute;
-  bottom: 22px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 48px);
-  max-width: 780px;
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  width: 100%;
+  max-width: calc(var(--conversation-max) + 64px);
+  margin: 0 auto;
+  padding: 10px 32px 20px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, var(--bg-desk) 28%);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1293,7 +1317,7 @@ body {
 
 /* ================= RIGHT SIDE READER & HIGHLIGHTS ================= */
 .side-reader {
-  width: 340px;
+  width: var(--reader-width);
   background-color: var(--bg-shelf);
   border-left: 1px solid var(--border-line);
   display: flex;
@@ -1305,7 +1329,9 @@ body {
 }
 
 .side-reader.closed {
-  margin-right: -340px;
+  transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .reader-header {
@@ -1346,6 +1372,72 @@ body {
   padding: 20px;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+@media (max-width: 1280px) {
+  .study-layout {
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  }
+
+  .study-layout.sidebar-collapsed {
+    grid-template-columns: 0 minmax(0, 1fr);
+  }
+
+  .side-reader {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 12;
+    background-color: var(--bg-shelf);
+    box-shadow: -18px 0 42px rgba(0, 0, 0, 0.32);
+    transition: transform 0.25s ease, opacity 0.25s ease;
+  }
+
+  .side-reader.closed {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 980px) {
+  .study-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bookshelf {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 13;
+    background-color: var(--bg-shelf);
+    box-shadow: 18px 0 42px rgba(0, 0, 0, 0.28);
+    transition: transform 0.25s ease, opacity 0.25s ease;
+  }
+
+  .bookshelf.collapsed {
+    width: var(--sidebar-width);
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-100%);
+  }
+
+  .desk-header {
+    padding: 0 16px;
+  }
+
+  .notebook-stream {
+    padding: 18px 16px 16px;
+  }
+
+  .composer-container {
+    padding: 8px 16px 14px;
+  }
+
+  .entry-card.user {
+    max-width: min(84%, 660px);
+    margin-right: 0;
+  }
 }
 
 .reader-empty {
@@ -1464,3 +1556,295 @@ body {
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+
+/* ==========================================================================
+   NEW UI ELEMENTS — Phase 1-7 Additions
+   ========================================================================== */
+
+/* ── Health badge ── */
+.health-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: default;
+  border: 1px solid transparent;
+  transition: opacity 0.2s;
+}
+.health-badge.health-ok {
+  background: rgba(16, 133, 72, 0.15);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.25);
+}
+.health-badge.health-warn {
+  background: rgba(255, 29, 88, 0.15);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.25);
+}
+
+/* ── Study tools section ── */
+.study-tools-section {
+  border-top: 1px solid var(--border-line);
+  padding-top: 10px;
+  margin-top: 4px;
+}
+
+.study-tools-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 2px 0 4px;
+}
+
+.study-tool-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-line);
+  border-radius: 8px;
+  color: var(--text-body);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 7px 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+}
+.study-tool-pill:hover {
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  transform: translateX(2px);
+}
+.study-tool-pill:active {
+  transform: translateX(2px) scale(0.97);
+}
+
+.studio-panel-heading {
+  margin-bottom: 20px;
+}
+
+.studio-panel-heading h2 {
+  margin: 8px 0 6px;
+  color: var(--text-ink);
+  font-family: 'Newsreader', serif;
+  font-size: 1.55rem;
+  font-weight: 500;
+}
+
+.studio-panel-heading p {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.side-reader .study-tools-grid {
+  gap: 10px;
+}
+
+.side-reader .study-tool-pill {
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 12px;
+  border-radius: 11px;
+}
+
+.side-reader .study-tool-pill:hover {
+  transform: translateY(-1px);
+}
+
+.studio-tool-icon {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  font-size: 0.9rem;
+}
+
+.side-reader .study-tool-pill span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.side-reader .study-tool-pill strong {
+  color: var(--text-ink);
+  font-size: 0.79rem;
+  font-weight: 600;
+}
+
+.side-reader .study-tool-pill small {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+/* ── Delete all button ── */
+.delete-all-btn {
+  width: 100%;
+  margin-bottom: 8px;
+  background: none;
+  border: 1px dashed rgba(248, 113, 113, 0.4);
+  color: #f87171;
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 500;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.delete-all-btn:hover {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: #f87171;
+}
+
+/* ── Doc card status indicators ── */
+.doc-processing {
+  opacity: 0.75;
+}
+.doc-status-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--border-line);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: citadelSpin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+.doc-status-error {
+  color: #f87171;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+.doc-chunks {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  padding: 1px 5px;
+  background: var(--bg-subtle);
+  border-radius: 4px;
+}
+
+/* ── Evidence & latency badges on AI messages ── */
+.evidence-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  letter-spacing: 0.03em;
+}
+.evidence-badge.has-evidence {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+.evidence-badge.no-evidence {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+.latency-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  background: var(--bg-subtle);
+  border-radius: 10px;
+}
+
+/* ── Typing dots animation ── */
+.typing-dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.typing-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: typingBounce 1.2s infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
+  40%            { transform: scale(1.0); opacity: 1.0; }
+}
+
+/* ── Note card with delete ── */
+.highlight-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-line);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+.highlight-text {
+  font-size: 0.84rem;
+  color: var(--text-body);
+  line-height: 1.5;
+}
+.highlight-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tag-pill {
+  font-size: 0.65rem;
+  padding: 2px 7px;
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+  border-radius: 10px;
+  font-weight: 600;
+}
+.note-delete-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 2px;
+  transition: color 0.15s;
+}
+.note-delete-btn:hover { color: #f87171; }
+
+/* ── Status pills in passage reader ── */
+.status-pill {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+.status-pill.ready {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+}
+.status-pill.processing {
+  background: rgba(253, 164, 129, 0.2);
+  color: var(--accent-primary);
+}
+.status-pill.error {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
