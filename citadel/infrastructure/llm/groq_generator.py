@@ -63,29 +63,29 @@ class GroqAnswerGenerator(BaseAnswerGenerator):
         self._chain = self._build_chain()
 
     def _build_chain(self):
-        """Build the prompt, Groq model, and string parser with LCEL."""
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    """You are Citadel, an academic study assistant grounded strictly in the student's uploaded textbook material.
+            """Build the prompt, Groq model, and string parser with LCEL."""
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        """You are Citadel, an academic study assistant grounded strictly in the student's uploaded textbook material.
 
-Use ONLY the passages inside <textbook_context> to answer the student's question. Do not use prior general knowledge, assumptions, or external facts.
+    Use ONLY the passages inside <textbook_context> to answer the student's question. Do not use prior general knowledge, assumptions, or external facts.
 
-Whenever you state a fact from a passage, cite it inline using [Source: filename, Page: number]. If the page is unavailable, use [Source: filename, Page: N/A].
+    Whenever you state a fact from a passage, cite it inline using. If the page is unavailable, use.
 
-If the passages do not contain enough information, reply exactly: "{refusal_message}"
-Do not guess or fabricate an answer.
-
-You may summarize chapters, explain concepts simply, compare ideas, or create revision questions, but every point must come strictly from the supplied passages.""",
-                ),
-                (
-                    "human",
-                    "<textbook_context>\n{context}\n</textbook_context>\n\nStudent question: {question}",
-                ),
-            ]
-        )
-        return prompt | self._llm | StrOutputParser()
+    IMPORTANT RULES FOR BROAD QUESTIONS:
+    - If the student asks for a summary, overview, main ideas, key takeaways, or simple explanation of "these documents" or "these files", summarize or explain the content of the provided <textbook_context> passages directly. Do NOT refuse just because you only see a subset of passages.
+    - Only reply with "{refusal_message}" if the student asks a specific question unrelated to the provided passages (or a greeting like "hi" with no question) and the passages contain zero relevant information.
+    Do not guess or fabricate an answer.""",
+                    ),
+                    (
+                        "human",
+                        "<textbook_context>\n{context}\n</textbook_context>\n\nStudent question: {question}",
+                    ),
+                ]
+            )
+            return prompt | self._llm | StrOutputParser()
 
     def generate_grounded_answer(
         self,
@@ -169,15 +169,34 @@ You may summarize chapters, explain concepts simply, compare ideas, or create re
         )
 
     def _filter_by_similarity(
-        self, chunks: List[DocumentChunk]
-    ) -> List[DocumentChunk]:
-        """Remove chunks whose similarity score falls below the threshold."""
-        result = []
-        for chunk in chunks:
-            # If no score available (e.g. from older ingestion), keep the chunk
-            if chunk.score is None or chunk.score >= self._min_similarity:
-                result.append(chunk)
-        return result
+            self, chunks: List[DocumentChunk]
+        ) -> List[DocumentChunk]:
+            """Remove chunks whose similarity score falls below the threshold.
+            
+            If all chunks fall below the threshold (common for broad summary queries
+            like 'summarize this document'), retain the top chunks so the LLM can still
+            summarize the available material.
+            """
+            if not chunks:
+                return []
+
+            result = []
+            for chunk in chunks:
+                if chunk.score is None or chunk.score >= self._min_similarity:
+                    result.append(chunk)
+
+            # Fallback: if similarity filtering wiped out every single chunk,
+            # keep the top 3 highest-scoring chunks so broad summary prompts still work
+            if not result:
+                logger.warning(
+                    "All %d chunks scored below %.2f (max score=%s). Falling back to top chunks.",
+                    len(chunks),
+                    self._min_similarity,
+                    max((c.score for c in chunks if c.score is not None), default=None),
+                )
+                return chunks[:3]
+
+            return result
 
     @staticmethod
     def _deduplicate_chunks(chunks: List[DocumentChunk]) -> List[DocumentChunk]:

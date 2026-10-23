@@ -784,7 +784,7 @@ async function handleFileUploads(files) {
     );
 
     // Step 3: refresh document list from registry
-    const docs = await CitadelAPI.getDocuments();
+    const docs = await CitadelAPI.getDocuments(state.currentSessionId);
     state.sources = docs.map((d) => ({
       id: d.id,
       name: d.filename || d.name,

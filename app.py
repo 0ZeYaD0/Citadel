@@ -133,7 +133,7 @@ def load_rag_pipeline():
         return
 
     try:
-        db = SQLiteRepository(db_path="citadel.db")
+        db = SQLiteRepository(db_path=Path(__file__).resolve().parent / "citadel.db")
 
         persist_directory = str(settings.chroma_persist_dir)
         query_embedder = LocalEmbedder()
@@ -497,13 +497,18 @@ def query_knowledge_base(request: UIQueryRequest):
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
     try:
+        active_source_ids = {
+            str(source.get("id", "")).strip()
+            for source in request.sources
+            if str(source.get("id", "")).strip()
+        }
         active_source_names = {
             str(source.get("name", "")).strip()
             for source in request.sources
             if str(source.get("name", "")).strip()
         }
 
-        if not active_source_names:
+        if not active_source_ids and not active_source_names:
             return {
                 "answer": (
                     "No documents are selected. Check at least one document on "
@@ -514,7 +519,15 @@ def query_knowledge_base(request: UIQueryRequest):
 
         query_embedding = query_embedder.embed_query(question)
         chapter_number = _extract_chapter_number(question)
-        metadata_filter: dict = {"source_file": {"$in": sorted(active_source_names)}}
+        # Uploaded chunks are persisted with both identifiers. Use the
+        # original filename when available because it is the same metadata
+        # field used by the study-tools endpoint and remains compatible with
+        # chunks created before stable document IDs were introduced.
+        metadata_filter: dict = (
+            {"source_file": {"$in": sorted(active_source_names)}}
+            if active_source_names
+            else {"document_id": {"$in": sorted(active_source_ids)}}
+        )
         if chapter_number is not None:
             metadata_filter = {
                 "$and": [

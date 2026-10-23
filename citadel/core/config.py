@@ -10,6 +10,13 @@ from citadel.core.exceptions import ConfigurationError
 
 
 load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _project_path(value: str, default: str) -> Path:
+	"""Resolve configured relative paths from the project root."""
+	path = Path(value or default)
+	return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 @dataclass(frozen=True)
@@ -138,9 +145,13 @@ def get_settings() -> Settings:
 		gemini_api_key=api_key,
 		groq_api_key=groq_api_key,
 		groq_model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
-		textbooks_dir=Path(os.getenv("TEXTBOOKS_DIR", "data/textbooks")),
-		chroma_persist_dir=Path(
-			os.getenv("CHROMA_PERSIST_DIR", "chroma_db")
+		textbooks_dir=_project_path(
+			os.getenv("TEXTBOOKS_DIR", "data/textbooks"),
+			"data/textbooks",
+		),
+		chroma_persist_dir=_project_path(
+			os.getenv("CHROMA_PERSIST_DIR", "chroma_db"),
+			"chroma_db",
 		),
 		chroma_collection_name=os.getenv(
 			"CHROMA_COLLECTION_NAME", "citadel_local_minilm"
