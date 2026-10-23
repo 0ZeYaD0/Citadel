@@ -1,80 +1,138 @@
 # Citadel
 
-Citadel is a Notebook-inspired study assistant. A student can upload or
-add a textbook to the system and ask questions about its contents. The assistant
-searches the textbook for relevant passages and uses them to produce a grounded
-answer instead of relying only on general knowledge.
+Citadel is a Notebook-inspired AI study assistant. Upload your textbooks and documents, then ask questions, generate flashcards, get quizzes, and create summaries — all grounded in your own material.
 
-## Idea
+## How It Works
 
-The project is designed to help students study from their own learning material.
-Possible questions include:
+1. **Upload** — Drop in PDF, DOCX, TXT, MD, CSV, or HTML files via the browser.
+2. **Embed** — Documents are chunked and embedded locally with `all-MiniLM-L6-v2` (no API required for embeddings).
+3. **Retrieve** — Student questions are embedded and matched against stored passages using vector similarity.
+4. **Generate** — Groq produces a grounded answer using only retrieved passages as context.
+5. **Persist** — Documents, sessions, messages, and notes are stored in a local SQLite database (`citadel.db`) and survive page refreshes.
 
-- "Summarise this chapter."
-- "Explain this concept in simple terms."
-- "What are the key differences between these two ideas?"
-- "Create revision questions from this section."
+## Stack
 
-If the answer cannot be found in the textbook, the assistant is instructed to
-say so rather than inventing information.
-
-## How it works
-
-1. The uploaded PDF, Markdown, and text documents are split into smaller pieces of text.
-2. The pieces are embedded locally with `all-MiniLM-L6-v2` and stored in Chroma.
-3. A student's question is used to retrieve the most relevant textbook passages.
-4. Groq generates an answer using those passages as context.
+| Concern | Provider |
+|---|---|
+| **Embeddings** | `sentence-transformers/all-MiniLM-L6-v2` (local CPU, no API key) |
+| **Answer generation** | Groq (free tier, fast) |
+| **Vector store** | ChromaDB (local, persistent) |
+| **Document registry / sessions / notes** | SQLite (`citadel.db`) |
+| **Supported file types** | `.pdf` `.docx` `.txt` `.md` `.csv` `.html` |
 
 ## Setup
-
-Create and activate a virtual environment, then install the dependencies:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-Create a `.env` file and add your Groq API key:
+Create a `.env` file:
 
 ```env
 GROQ_API_KEY=your_groq_api_key_here
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=qwen/qwen3-32b
 LOCAL_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+CHROMA_PERSIST_DIR=chroma_db
+CHROMA_COLLECTION_NAME=citadel_local_minilm
+RETRIEVAL_TOP_K=5
+CHUNK_SIZE=1500
+CHUNK_OVERLAP=200
 ```
 
-The local embedding model runs on CPU and does not use an API quota. Groq is
-used only for answer generation. Keep the `.env` file private.
+> **Note**: `GEMINI_API_KEY` is not required unless you switch to `gemini_generator.py`. The default stack uses Groq + local embeddings only.
 
-## Running the API
-
-The application creates an empty Chroma database automatically on first
-startup. You can run the app before adding any documents:
+## Running
 
 ```powershell
 python app.py
 ```
 
-Then open `http://localhost:8000`, upload one or more PDF, Markdown, or text
-files, and wait for the upload to finish. The website automatically extracts,
-chunks, embeds, and stores each uploaded document.
+Open [http://localhost:8000](http://localhost:8000).  
+Upload documents, wait for the processing badge to turn green, then ask questions.
 
-The command-line ingestion script is optional and is only needed when you want
-to pre-load files from `data\textbooks` before opening the website:
+## Features
 
-```powershell
-python ingest_data.py data\textbooks\pythonlearn.pdf
-```
+### Document Management
+- Upload multiple files at once (PDF, DOCX, TXT, MD, CSV, HTML)
+- Background processing with live progress stages (Uploading → Extracting → Chunking → Embedding → Ready)
+- Documents persist in SQLite registry — survive page refreshes
+- Delete individual documents or all documents at once
+- Per-document chunk count display
 
-The API runs at `http://localhost:8000`. Ask a question by sending a `POST`
-request to `/ask`:
+### Active-Source Filtering
+- Check/uncheck documents to include or exclude them from retrieval
+- If no documents are selected, a clear message is shown instead of searching everything
+- Filtering is enforced in the backend — not just cosmetic
 
+### Study Tools
+From the sidebar, select any combination of checked documents and click:
+- 🃏 **Flashcards** — Q&A pairs from your material
+- 📝 **Quiz me** — Multiple-choice questions
+- 📋 **Summarize** — Structured bullet-point summary
+- 🔑 **Key terms** — Definitions extracted from the text
+- 💡 **Explain simply** — Beginner-friendly explanation with analogies
+
+### Grounded Answers
+- Every answer cites the source file and page number
+- **Grounded** / **No evidence found** badges on each response
+- Generation latency displayed per response
+- Similarity threshold filtering removes irrelevant chunks before generation
+- If no supporting evidence is found, the assistant says so rather than guessing
+
+### Sessions & Notes
+- Study sessions (notebooks) persist across page refreshes
+- Chat messages are saved per session to SQLite
+- Save any AI response as a pinned note
+- Notes persist across sessions and can be deleted individually
+
+### Observability
+`GET /health` returns:
 ```json
 {
-  "question": "What is the main idea of chapter one?"
+  "status": "ok",
+  "pipeline": "ready",
+  "database": "ready",
+  "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "generation_model": "qwen/qwen3-32b",
+  "total_chunks": 1847
 }
 ```
 
-The web interface accepts multiple PDF, Markdown, or text files in one upload.
-Selected documents are used to filter retrieval, and each uploaded document can
-be removed independently from the vector store.
+## API Reference
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Pipeline + DB liveness |
+| `POST` | `/api/upload` | Upload files → returns `job_id` |
+| `GET` | `/api/jobs/{id}` | Poll background job status |
+| `GET` | `/api/documents` | List document registry |
+| `DELETE` | `/api/documents/{id}` | Delete one document |
+| `DELETE` | `/api/documents` | Delete all documents |
+| `POST` | `/api/query` | RAG query with source filter |
+| `POST` | `/api/study-tools` | Flashcards, quiz, summary, key-terms |
+| `GET` | `/api/sessions` | List sessions |
+| `POST` | `/api/sessions` | Create / rename session |
+| `DELETE` | `/api/sessions/{id}` | Delete session + messages |
+| `GET` | `/api/sessions/{id}/messages` | Get session messages |
+| `POST` | `/api/sessions/{id}/messages` | Append message |
+| `GET` | `/api/notes` | List notes |
+| `POST` | `/api/notes` | Save note |
+| `DELETE` | `/api/notes/{id}` | Delete note |
+
+## Running Tests
+
+```powershell
+pytest tests/ -v
+```
+
+Integration tests mock the embedding, vector, and LLM components so they run fully offline and quickly.
+
+## CLI Ingestion (Optional)
+
+Pre-load files before opening the browser:
+
+```powershell
+python ingest_data.py data\textbooks\your_textbook.pdf
+```

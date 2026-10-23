@@ -13,3 +13,9 @@ fastapi
 uvicorn
 pydantic
 python-multipart
+python-docx
+docx2txt
+beautifulsoup4
+httpx
+pytest
+pytest-asyncio

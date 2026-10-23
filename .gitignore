@@ -34,6 +34,8 @@ pip-wheel-metadata/
 
 # Local application data
 chroma_db/
+*.db
+*.sqlite3
 *.log
 
 # Editor and operating system files
